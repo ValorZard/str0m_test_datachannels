@@ -24,8 +24,14 @@ struct Args {
     #[arg(long, value_enum)]
     mode: Mode,
 
-    #[arg(long, default_value = "127.0.0.1")]
-    ip: IpAddr,
+    #[arg(long, default_value = "0.0.0.0")]
+    bind_ip: IpAddr,
+
+    #[arg(long)]
+    advertise_ip: Option<IpAddr>,
+
+    #[arg(long)]
+    server_ip: Option<IpAddr>,
 
     #[arg(long, default_value_t = 7000)]
     signal_port: u16,
@@ -56,11 +62,19 @@ fn read_msg(stream: TcpStream) -> Result<SignalMessage> {
 }
 
 async fn run_server(args: &Args) -> Result<()> {
-    let mut peer = Peer::new(args.ip, args.server_udp_port).await?;
-    println!("server: UDP on {}", peer.local_addr);
+    let advertise_ip = args
+        .advertise_ip
+        .ok_or_else(|| anyhow!("--advertise-ip is required in server mode"))?;
 
-    let listener = TcpListener::bind((args.ip, args.signal_port))?;
-    println!("server: signaling on {}:{}", args.ip, args.signal_port);
+    let mut peer = Peer::new(args.bind_ip, advertise_ip, args.server_udp_port).await?;
+    println!("server: UDP bound on {}", peer.local_addr);
+    println!(
+        "server: advertising ICE candidate {}:{}",
+        advertise_ip, args.server_udp_port
+    );
+
+    let listener = TcpListener::bind((args.bind_ip, args.signal_port))?;
+    println!("server: signaling on {}:{}", args.bind_ip, args.signal_port);
 
     let (mut stream, addr) = listener.accept()?;
     println!("server: signaling connected from {addr}");
@@ -78,13 +92,23 @@ async fn run_server(args: &Args) -> Result<()> {
 }
 
 async fn run_client(args: &Args) -> Result<()> {
-    let mut peer = Peer::new(args.ip, args.client_udp_port).await?;
-    println!("client: UDP on {}", peer.local_addr);
+    let server_ip = args
+        .server_ip
+        .ok_or_else(|| anyhow!("--server-ip is required in client mode"))?;
 
-    let mut stream = TcpStream::connect((args.ip, args.signal_port))?;
+    let advertise_ip = args.advertise_ip.unwrap_or(args.bind_ip);
+
+    let mut peer = Peer::new(args.bind_ip, advertise_ip, args.client_udp_port).await?;
+    println!("client: UDP bound on {}", peer.local_addr);
+    println!(
+        "client: advertising ICE candidate {}:{}",
+        advertise_ip, args.client_udp_port
+    );
+
+    let mut stream = TcpStream::connect((server_ip, args.signal_port))?;
     println!(
         "client: signaling connected to {}:{}",
-        args.ip, args.signal_port
+        server_ip, args.signal_port
     );
 
     let offer_sdp = peer.create_offer("chat")?;

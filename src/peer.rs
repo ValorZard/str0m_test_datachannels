@@ -24,7 +24,7 @@ pub struct Peer {
 }
 
 impl Peer {
-    pub async fn new(bind_ip: IpAddr, udp_port: u16) -> Result<Self> {
+    pub async fn new(bind_ip: IpAddr, advertise_ip: IpAddr, udp_port: u16) -> Result<Self> {
         let std_socket = std::net::UdpSocket::bind(SocketAddr::new(bind_ip, udp_port))?;
         std_socket.set_nonblocking(true)?;
         let socket = UdpSocket::from_std(std_socket)?;
@@ -39,7 +39,8 @@ impl Peer {
             pending_offer: None,
         };
 
-        let candidate = Candidate::host(local_addr, "udp")?;
+        let advertised_addr = SocketAddr::new(advertise_ip, local_addr.port());
+        let candidate = Candidate::host(advertised_addr, "udp")?;
         peer.rtc.add_local_candidate(candidate);
 
         Ok(peer)
@@ -48,9 +49,7 @@ impl Peer {
     pub fn create_offer(&mut self, channel_label: &str) -> Result<String> {
         let mut api = self.rtc.sdp_api();
         let _cid = api.add_channel(channel_label.into());
-        let (offer, pending) = api
-            .apply()
-            .ok_or_else(|| anyhow!("no SDP changes to apply"))?;
+        let (offer, pending) = api.apply().ok_or_else(|| anyhow!("no SDP changes to apply"))?;
         self.pending_offer = Some(pending);
         Ok(offer.to_sdp_string())
     }
@@ -119,11 +118,7 @@ impl Peer {
                                             ch.write(data.binary, &data.data)?;
                                         }
                                     } else {
-                                        buffered_echo.push((
-                                            data.id,
-                                            data.binary,
-                                            data.data.to_vec(),
-                                        ));
+                                        buffered_echo.push((data.id, data.binary, data.data.to_vec()));
                                     }
                                 }
                                 RoleAction::ClientSendAndWait { message } => {
