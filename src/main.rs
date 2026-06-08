@@ -1,4 +1,4 @@
-use anyhow::{anyhow, bail, Result};
+use anyhow::{Result, anyhow, bail};
 use clap::{Parser, ValueEnum};
 use serde_json::Deserializer;
 use std::{
@@ -82,7 +82,10 @@ async fn run_client(args: &Args) -> Result<()> {
     println!("client: UDP on {}", peer.local_addr);
 
     let mut stream = TcpStream::connect((args.ip, args.signal_port))?;
-    println!("client: signaling connected to {}:{}", args.ip, args.signal_port);
+    println!(
+        "client: signaling connected to {}:{}",
+        args.ip, args.signal_port
+    );
 
     let offer_sdp = peer.create_offer("chat")?;
     write_msg(&mut stream, &SignalMessage::Offer { sdp: offer_sdp })?;
@@ -107,12 +110,8 @@ async fn run_client(args: &Args) -> Result<()> {
         }
     });
 
-    peer.run(
-        "client",
-        RoleAction::ClientSendAndWait { message: msg },
-        tx,
-    )
-    .await
+    peer.run("client", RoleAction::ClientSendAndWait { message: msg }, tx)
+        .await
 }
 
 #[tokio::main]
