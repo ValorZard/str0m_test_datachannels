@@ -1,16 +1,15 @@
 use std::net::IpAddr;
 
 use anyhow::{Result, anyhow, bail};
-use clap::{Parser, ValueEnum};
+use clap::Parser;
 use futures_util::StreamExt;
 use native_shared::{
     peer::{Peer, RoleAction},
     read_msg, write_msg,
 };
-use serde_json::Deserializer;
 use signaling_shared::SignalMessage;
 
-use tokio::{net::TcpListener, sync::oneshot, task::JoinSet};
+use tokio::{net::TcpListener, sync::oneshot};
 
 #[derive(Debug, Parser)]
 struct Args {
@@ -39,7 +38,7 @@ async fn run_server(args: &Args) -> Result<()> {
     let listener = TcpListener::bind((args.bind_ip, args.signal_port)).await?;
     println!("server: signaling on {}:{}", args.bind_ip, args.signal_port);
 
-    while let Ok((mut raw_stream, addr)) = listener.accept().await {
+    while let Ok((raw_stream, addr)) = listener.accept().await {
         let ws_stream = match tokio_tungstenite::accept_async(raw_stream).await {
             Ok(ws) => ws,
             Err(err) => {
@@ -63,8 +62,33 @@ async fn run_server(args: &Args) -> Result<()> {
         )
         .await?;
 
+        let (ice_tx, ice_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
+        tokio::spawn(async move {
+            loop {
+                let msg = match read_msg(&mut read_stream).await {
+                    Ok(m) => m,
+                    Err(err) => {
+                        eprintln!("server: signaling read ended: {err}");
+                        break;
+                    }
+                };
+
+                match msg {
+                    SignalMessage::IceCandidate { candidate } => {
+                        if ice_tx.send(candidate).is_err() {
+                            break;
+                        }
+                    }
+                    SignalMessage::Offer { .. } | SignalMessage::Answer { .. } => {
+                        eprintln!("server: unexpected signaling message after answer");
+                    }
+                }
+            }
+        });
+
         let (tx, _rx) = oneshot::channel::<Vec<u8>>();
-        peer.run("server", RoleAction::EchoServer, tx).await?
+        peer.run("server", RoleAction::EchoServer, Some(ice_rx), tx)
+            .await?
     }
 
     Ok(())

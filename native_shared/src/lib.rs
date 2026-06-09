@@ -1,19 +1,13 @@
-use anyhow::{Result, anyhow, bail};
+use anyhow::{Result, anyhow};
 use futures_util::{
     SinkExt, StreamExt,
     stream::{SplitSink, SplitStream},
 };
-use serde::{Deserialize, Serialize};
-use serde_json::Deserializer;
 use signaling_shared::SignalMessage;
 use tokio::{
-    io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader},
-    net::{
-        TcpStream,
-        tcp::{ReadHalf, WriteHalf},
-    },
+    io::{AsyncRead, AsyncWrite},
 };
-use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, tungstenite};
+use tokio_tungstenite::{WebSocketStream, tungstenite};
 pub mod peer;
 
 pub async fn write_msg<S>(

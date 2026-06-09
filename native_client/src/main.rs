@@ -79,7 +79,12 @@ async fn run_client(args: &Args) -> Result<()> {
         }
     });
 
-    peer.run("client", RoleAction::ClientSendAndWait { message: msg }, tx)
+    peer.run(
+        "client",
+        RoleAction::ClientSendAndWait { message: msg },
+        None,
+        tx,
+    )
         .await
 }
 

@@ -205,13 +205,18 @@ fn install_peer_handlers(inner: &Rc<Inner>) -> Result<(), JsValue> {
     let inner_for_ice = Rc::clone(inner);
     let on_ice = Closure::wrap(Box::new(move |e: RtcPeerConnectionIceEvent| {
         if let Some(candidate) = e.candidate() {
+            let candidate_str = candidate.candidate();
+            if candidate_str.trim().is_empty() {
+                return;
+            }
+
             log!("{:?}", candidate);
             // since we are just doing datachannels, we don't care about media, so no need for mid or mline
             inner_for_ice
                 .pending_local_ice
                 .borrow_mut()
                 .push(IceCandidateMessage {
-                    candidate: candidate.candidate(),
+                    candidate: candidate_str,
                     sdp_mid: None,
                     sdp_mline_index: None,
                 });
