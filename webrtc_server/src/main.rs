@@ -1,6 +1,6 @@
 use std::net::IpAddr;
 
-use anyhow::{Result, anyhow, bail};
+use anyhow::{Result, bail};
 use clap::Parser;
 use futures_util::StreamExt;
 use native_shared::{
@@ -10,6 +10,33 @@ use native_shared::{
 use signaling_shared::SignalMessage;
 
 use tokio::{net::TcpListener, sync::oneshot};
+
+fn detect_primary_local_ip() -> Option<IpAddr> {
+    // Discover the preferred outbound local interface without sending traffic.
+    let socket = std::net::UdpSocket::bind("0.0.0.0:0").ok()?;
+    socket.connect("1.1.1.1:80").ok()?;
+    Some(socket.local_addr().ok()?.ip())
+}
+
+fn choose_advertise_ip(args: &Args, signaling_peer_ip: IpAddr) -> IpAddr {
+    if let Some(ip) = args.advertise_ip {
+        return ip;
+    }
+
+    if !args.bind_ip.is_unspecified() {
+        return args.bind_ip;
+    }
+
+    if signaling_peer_ip.is_loopback() {
+        if let Some(ip) = detect_primary_local_ip() {
+            if !ip.is_loopback() {
+                return ip;
+            }
+        }
+    }
+
+    signaling_peer_ip
+}
 
 #[derive(Debug, Parser)]
 struct Args {
@@ -27,18 +54,22 @@ struct Args {
 }
 
 async fn run_server(args: &Args) -> Result<()> {
-    let advertise_ip = args
-        .advertise_ip
-        .ok_or_else(|| anyhow!("--advertise-ip is required in server mode"))?;
-
-    let mut peer = Peer::new(args.bind_ip, advertise_ip, args.udp_port).await?;
-    println!("server: UDP bound on {}", peer.bound_addr);
-    println!("server: advertising ICE candidate {}", peer.advertised_addr);
-
     let listener = TcpListener::bind((args.bind_ip, args.signal_port)).await?;
     println!("server: signaling on {}:{}", args.bind_ip, args.signal_port);
 
     while let Ok((raw_stream, addr)) = listener.accept().await {
+        // this is only really necessary if you are testing server and client on same machine
+        let advertise_ip = choose_advertise_ip(args, addr.ip());
+        if addr.ip().is_loopback() && !advertise_ip.is_loopback() {
+            eprintln!(
+                "server: info: signaling peer is loopback ({addr}), advertising non-loopback ICE IP {advertise_ip} for browser compatibility"
+            );
+        }
+
+        let mut peer = Peer::new(args.bind_ip, advertise_ip, args.udp_port).await?;
+        println!("server: UDP bound on {}", peer.bound_addr);
+        println!("server: advertising ICE candidate {}", peer.advertised_addr);
+
         let ws_stream = match tokio_tungstenite::accept_async(raw_stream).await {
             Ok(ws) => ws,
             Err(err) => {

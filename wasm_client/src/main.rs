@@ -10,10 +10,7 @@ use wasm_bindgen::closure::Closure;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::{JsFuture, spawn_local};
 use web_sys::{
-    Element, Event, HtmlButtonElement, HtmlElement, HtmlInputElement, MessageEvent,
-    RtcConfiguration, RtcDataChannel, RtcDataChannelEvent, RtcIceCandidate, RtcIceCandidateInit,
-    RtcIceServer, RtcPeerConnection, RtcPeerConnectionIceEvent, RtcSdpType,
-    RtcSessionDescriptionInit,
+    Element, Event, HtmlButtonElement, HtmlElement, HtmlInputElement, MessageEvent, RtcConfiguration, RtcDataChannel, RtcDataChannelEvent, RtcIceCandidate, RtcIceCandidateInit, RtcIceConnectionState, RtcIceGatheringState, RtcIceServer, RtcPeerConnection, RtcPeerConnectionIceEvent, RtcSdpType, RtcSessionDescriptionInit
 };
 use ws_stream_wasm::{WsMessage, WsMeta};
 
@@ -173,12 +170,12 @@ impl WasmPeer {
         Ok(out)
     }
 
-    pub fn ice_connection_state(&self) -> String {
-        format!("{:?}", self.inner.pc.ice_connection_state())
+    pub fn ice_connection_state(&self) -> RtcIceConnectionState {
+        self.inner.pc.ice_connection_state()
     }
 
-    pub fn ice_gathering_state(&self) -> String {
-        format!("{:?}", self.inner.pc.ice_gathering_state())
+    pub fn ice_gathering_state(&self) -> RtcIceGatheringState {
+        self.inner.pc.ice_gathering_state()
     }
 
     pub fn close(&self) {
@@ -321,63 +318,74 @@ fn connect_to_server(server_address: String) {
             }
         }
 
-        // Send local ICE candidates as they are gathered.
-        {
-            let wasm_peer = Rc::clone(&wasm_peer);
-            let send_stream = Rc::clone(&send_stream);
-            spawn_local(async move {
-                loop {
-                    let candidates = drain_local_ice_candidates(wasm_peer.clone());
-
-                    for ice in candidates {
-                        let msg = SignalMessage::IceCandidate {
-                            candidate: ice.candidate,
+        let peer = wasm_peer.clone();
+        spawn_local(async move {
+            while let Some(msg) = recv_stream.next().await {
+                match msg {
+                    WsMessage::Text(text) => {
+                        let parsed = match serde_json::from_str::<SignalMessage>(&text) {
+                            Ok(v) => v,
+                            Err(e) => {
+                                log!("failed to parse signaling message: {:?}", e);
+                                continue;
+                            }
                         };
-                        let text = serde_json::to_string(&msg).unwrap();
-                        if let Err(e) = send_stream.borrow_mut().send(WsMessage::Text(text)).await {
-                            log!("failed to send ICE candidate: {:?}", e);
-                            return;
-                        }
-                    }
 
-                    TimeoutFuture::new(25).await;
-                }
-            });
-        }
-
-        while let Some(msg) = recv_stream.next().await {
-            match msg {
-                WsMessage::Text(text) => {
-                    let parsed = match serde_json::from_str::<SignalMessage>(&text) {
-                        Ok(v) => v,
-                        Err(e) => {
-                            log!("failed to parse signaling message: {:?}", e);
-                            continue;
-                        }
-                    };
-
-                    match parsed {
-                        SignalMessage::Answer { sdp } => {
-                            log!("received answer sdp");
-                            if let Err(e) = wasm_peer.accept_answer(sdp).await {
-                                log!("failed to accept answer: {:?}", e);
-                                return;
+                        match parsed {
+                            SignalMessage::Answer { sdp } => {
+                                log!("received answer sdp");
+                                if let Err(e) = peer.accept_answer(sdp).await {
+                                    log!("failed to accept answer: {:?}", e);
+                                    return;
+                                }
+                            }
+                            SignalMessage::IceCandidate { candidate } => {
+                                if let Err(e) = peer.add_ice_candidate(candidate).await {
+                                    log!("failed to add remote ICE candidate: {:?}", e);
+                                }
+                            }
+                            SignalMessage::Offer { .. } => {
+                                log!("unexpected offer");
                             }
                         }
-                        SignalMessage::IceCandidate { candidate } => {
-                            if let Err(e) = wasm_peer.add_ice_candidate(candidate).await {
-                                log!("failed to add remote ICE candidate: {:?}", e);
-                            }
-                        }
-                        SignalMessage::Offer { .. } => {
-                            log!("unexpected offer");
-                        }
                     }
-                }
-                other => {
-                    log!("unexpected websocket message: {:?}", other);
+                    other => {
+                        log!("unexpected websocket message: {:?}", other);
+                    }
                 }
             }
+        });
+
+        // Send local ICE candidates as they are gathered.
+        loop {
+            if wasm_peer.ice_connection_state() == RtcIceConnectionState::Completed || wasm_peer.ice_gathering_state() == RtcIceGatheringState::Complete {
+                log!("Ice is finished");
+                break;
+            }
+
+            let candidates = drain_local_ice_candidates(wasm_peer.clone());
+
+            for ice in candidates {
+                let msg = SignalMessage::IceCandidate {
+                    candidate: ice.candidate,
+                };
+                let text = serde_json::to_string(&msg).unwrap();
+                if let Err(e) = send_stream.borrow_mut().send(WsMessage::Text(text)).await {
+                    log!("failed to send ICE candidate: {:?}", e);
+                    return;
+                }
+            }
+
+            TimeoutFuture::new(25).await;
+        }
+
+        // send until its open
+        loop {
+            if let Ok(_) = wasm_peer.send_text("Hello from WASM!".to_string()) {
+                log!("Success");
+                break;
+            }
+            TimeoutFuture::new(50).await;
         }
     });
 }
