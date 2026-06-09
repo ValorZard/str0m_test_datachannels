@@ -5,8 +5,8 @@ use native_shared::{
     peer::{Peer, RoleAction},
     read_msg, write_msg,
 };
-use signaling_shared::SignalMessage;
 use serde_json::Deserializer;
+use signaling_shared::SignalMessage;
 use std::net::{IpAddr, SocketAddr};
 use tokio::{net::TcpStream, sync::oneshot};
 use tokio_tungstenite::connect_async;

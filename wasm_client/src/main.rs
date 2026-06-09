@@ -22,7 +22,6 @@ macro_rules! log {
     };
 }
 
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IceCandidateMessage {
     pub candidate: String,
@@ -308,7 +307,10 @@ fn main() {
         loop {
             if let Some(WsMessage::Text(answer_string)) = recv_stream.next().await {
                 let parsed_answer = serde_json::from_str::<SignalMessage>(&answer_string).unwrap();
-                wasm_peer.accept_answer(parsed_answer.sdp().clone()).await.unwrap();
+                wasm_peer
+                    .accept_answer(parsed_answer.sdp().clone())
+                    .await
+                    .unwrap();
                 break;
             }
         }

@@ -7,8 +7,8 @@ use native_shared::{
     peer::{Peer, RoleAction},
     read_msg, write_msg,
 };
-use signaling_shared::SignalMessage;
 use serde_json::Deserializer;
+use signaling_shared::SignalMessage;
 
 use tokio::{net::TcpListener, sync::oneshot, task::JoinSet};
 

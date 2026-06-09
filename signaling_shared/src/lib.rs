@@ -8,7 +8,7 @@ pub enum SignalMessage {
 }
 
 impl SignalMessage {
-    pub fn sdp(&self ) -> &String {
+    pub fn sdp(&self) -> &String {
         match self {
             SignalMessage::Offer { sdp } => sdp,
             SignalMessage::Answer { sdp } => sdp,
