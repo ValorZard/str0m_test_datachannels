@@ -5,13 +5,15 @@ use serde::{Deserialize, Serialize};
 pub enum SignalMessage {
     Offer { sdp: String },
     Answer { sdp: String },
+    IceCandidate { candidate: String },
 }
 
 impl SignalMessage {
-    pub fn sdp(&self) -> &String {
+    pub fn sdp(&self) -> Option<&String> {
         match self {
-            SignalMessage::Offer { sdp } => sdp,
-            SignalMessage::Answer { sdp } => sdp,
+            Self::Offer { sdp } => Some(sdp),
+            Self::Answer { sdp } => Some(sdp),
+            Self::IceCandidate { .. } => None,
         }
     }
 }

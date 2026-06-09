@@ -1,6 +1,6 @@
 use anyhow::{Result, anyhow};
 use std::{
-    net::{IpAddr, SocketAddr},
+    net::{IpAddr, SocketAddr, ToSocketAddrs},
     time::Instant,
 };
 use str0m::{
@@ -9,7 +9,10 @@ use str0m::{
     channel::ChannelId,
     net::{Protocol, Receive},
 };
-use tokio::{net::UdpSocket, sync::oneshot};
+use tokio::{
+    net::UdpSocket,
+    sync::{mpsc, oneshot},
+};
 
 pub enum RoleAction {
     EchoServer,
@@ -25,6 +28,35 @@ pub struct Peer {
 }
 
 impl Peer {
+    // some of the ice candidates are mDNS, convert to IP to properly digest them
+    fn resolve_mdns_candidate(candidate: &str) -> Option<String> {
+        let mut parts: Vec<String> = candidate
+            .split_whitespace()
+            .map(std::string::ToString::to_string)
+            .collect();
+
+        if parts.len() < 6 {
+            return None;
+        }
+
+        let host = parts[4].clone();
+        let port = parts[5].clone();
+        if !host.ends_with(".local") {
+            return None;
+        }
+
+        let lookup = format!("{host}:{port}");
+        let resolved = lookup.to_socket_addrs().ok()?.next()?.ip();
+
+        parts[4] = resolved.to_string();
+
+        let converted_candidate = parts.join(" ");
+
+        println!("Converted mDNS to IP -> {converted_candidate}");
+
+        Some(converted_candidate)
+    }
+
     pub async fn new(bind_ip: IpAddr, advertise_ip: IpAddr, udp_port: u16) -> Result<Self> {
         str0m::crypto::from_feature_flags().install_process_default();
 
@@ -77,10 +109,34 @@ impl Peer {
         Ok(())
     }
 
+    pub fn add_remote_ice_candidate(&mut self, candidate: String) -> Result<()> {
+        let candidate = candidate.trim().to_string();
+        if candidate.is_empty() {
+            // Browser emits empty candidate as end-of-candidates; nothing to add.
+            return Ok(());
+        }
+
+        println!("Incoming remote candidate {candidate}");
+
+        let normalized_candidate =
+            Self::resolve_mdns_candidate(&candidate).unwrap_or_else(|| candidate.clone());
+
+        match Candidate::from_sdp_string(&normalized_candidate) {
+            Ok(candidate) => {
+                self.rtc.add_remote_candidate(candidate);
+            }
+            Err(err) => {
+                eprintln!("ignoring unsupported remote ICE candidate: {candidate} ({err})");
+            }
+        }
+        Ok(())
+    }
+
     pub async fn run(
         &mut self,
         peer_name: &str,
         action: RoleAction,
+        mut remote_ice_rx: Option<mpsc::UnboundedReceiver<String>>,
         done_tx: oneshot::Sender<Vec<u8>>,
     ) -> Result<()> {
         let mut buf = vec![0u8; 65535];
@@ -90,6 +146,21 @@ impl Peer {
         let mut buffered_echo: Vec<(ChannelId, bool, Vec<u8>)> = Vec::new();
 
         loop {
+            // Apply any trickled remote ICE candidates before polling RTC output.
+            if let Some(rx) = remote_ice_rx.as_mut() {
+                loop {
+                    match rx.try_recv() {
+                        Ok(candidate) => {
+                            self.add_remote_ice_candidate(candidate)?;
+                        }
+                        Err(mpsc::error::TryRecvError::Empty)
+                        | Err(mpsc::error::TryRecvError::Disconnected) => {
+                            break;
+                        }
+                    }
+                }
+            }
+
             let next_timeout = loop {
                 match self.rtc.poll_output()? {
                     Output::Timeout(t) => break t,

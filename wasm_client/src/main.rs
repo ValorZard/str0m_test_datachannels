@@ -12,8 +12,8 @@ use wasm_bindgen_futures::{JsFuture, spawn_local};
 use web_sys::{
     Element, Event, HtmlButtonElement, HtmlElement, HtmlInputElement, MessageEvent,
     RtcConfiguration, RtcDataChannel, RtcDataChannelEvent, RtcIceCandidate, RtcIceCandidateInit,
-    RtcIceServer, RtcPeerConnection, RtcPeerConnectionIceEvent, RtcSdpType,
-    RtcSessionDescriptionInit,
+    RtcIceConnectionState, RtcIceGatheringState, RtcIceServer, RtcPeerConnection,
+    RtcPeerConnectionIceEvent, RtcSdpType, RtcSessionDescriptionInit,
 };
 use ws_stream_wasm::{WsMessage, WsMeta};
 
@@ -86,9 +86,6 @@ impl WasmPeer {
             .await
             .ok()?;
 
-        // TODO: Add trickle ice
-        wait_for_ice_gathering_complete(&self.inner.pc).await;
-
         let local = self.inner.pc.local_description()?;
         log!("local description after gathering: {:?}", local.sdp());
         Some(local.sdp())
@@ -120,20 +117,8 @@ impl WasmPeer {
         Ok(())
     }
 
-    pub async fn add_ice_candidate(
-        &self,
-        candidate: String,
-        sdp_mid: Option<String>,
-        sdp_mline_index: Option<u16>,
-    ) -> Result<(), JsValue> {
-        let mut init = RtcIceCandidateInit::new(&candidate);
-        if let Some(mid) = sdp_mid.as_deref() {
-            init.set_sdp_mid(Some(mid));
-        }
-        if let Some(index) = sdp_mline_index {
-            init.set_sdp_m_line_index(Some(index));
-        }
-
+    pub async fn add_ice_candidate(&self, candidate: String) -> Result<(), JsValue> {
+        let init = RtcIceCandidateInit::new(&candidate);
         let candidate = RtcIceCandidate::new(&init)?;
         JsFuture::from(
             self.inner
@@ -143,14 +128,6 @@ impl WasmPeer {
         .await?;
 
         Ok(())
-    }
-
-    pub fn take_local_ice_candidates(&self) -> Result<String, JsValue> {
-        let mut pending = self.inner.pending_local_ice.borrow_mut();
-        let out = serde_json::to_string(&*pending)
-            .map_err(|e| JsValue::from_str(&format!("serialize ICE candidates: {e}")))?;
-        pending.clear();
-        Ok(out)
     }
 
     pub fn send_text(&self, text: String) -> Result<(), JsValue> {
@@ -196,12 +173,12 @@ impl WasmPeer {
         Ok(out)
     }
 
-    pub fn ice_connection_state(&self) -> String {
-        format!("{:?}", self.inner.pc.ice_connection_state())
+    pub fn ice_connection_state(&self) -> RtcIceConnectionState {
+        self.inner.pc.ice_connection_state()
     }
 
-    pub fn ice_gathering_state(&self) -> String {
-        format!("{:?}", self.inner.pc.ice_gathering_state())
+    pub fn ice_gathering_state(&self) -> RtcIceGatheringState {
+        self.inner.pc.ice_gathering_state()
     }
 
     pub fn close(&self) {
@@ -225,14 +202,20 @@ fn install_peer_handlers(inner: &Rc<Inner>) -> Result<(), JsValue> {
     let inner_for_ice = Rc::clone(inner);
     let on_ice = Closure::wrap(Box::new(move |e: RtcPeerConnectionIceEvent| {
         if let Some(candidate) = e.candidate() {
+            let candidate_str = candidate.candidate();
+            if candidate_str.trim().is_empty() {
+                return;
+            }
+
             log!("{:?}", candidate);
+            // since we are just doing datachannels, we don't care about media, so no need for mid or mline
             inner_for_ice
                 .pending_local_ice
                 .borrow_mut()
                 .push(IceCandidateMessage {
-                    candidate: candidate.candidate(),
-                    sdp_mid: candidate.sdp_mid(),
-                    sdp_mline_index: candidate.sdp_m_line_index(),
+                    candidate: candidate_str,
+                    sdp_mid: None,
+                    sdp_mline_index: None,
                 });
         }
     }) as Box<dyn FnMut(_)>);
@@ -296,24 +279,21 @@ fn install_data_channel_handlers(inner: &Rc<Inner>, dc: &RtcDataChannel) -> Resu
     Ok(())
 }
 
-async fn wait_for_ice_gathering_complete(pc: &RtcPeerConnection) {
-    loop {
-        log!("{:?}", pc.ice_gathering_state());
-        if pc.ice_gathering_state() == web_sys::RtcIceGatheringState::Complete {
-            break;
-        }
-        TimeoutFuture::new(50).await;
-    }
+pub fn drain_local_ice_candidates(peer: Rc<WasmPeer>) -> Vec<IceCandidateMessage> {
+    peer.inner
+        .pending_local_ice
+        .borrow_mut()
+        .drain(..)
+        .collect()
 }
-
 // TODO: Make this not hardcoded at some point
 const SERVER_ADDRESS: &str = "ws://127.0.0.1:7000";
 
 fn connect_to_server(server_address: String) {
     spawn_local(async move {
-        let wasm_peer = WasmPeer::new().expect("should work");
+        let wasm_peer = Rc::new(WasmPeer::new().expect("should work"));
 
-        let (ws, wsio) = match WsMeta::connect(server_address.clone(), None).await {
+        let (_ws, wsio) = match WsMeta::connect(server_address.clone(), None).await {
             Ok(parts) => parts,
             Err(e) => {
                 log!("WebSocket connect failed for {}: {:?}", server_address, e);
@@ -321,26 +301,89 @@ fn connect_to_server(server_address: String) {
             }
         };
 
-        let (mut send_stream, mut recv_stream) = wsio.split();
+        let (send_stream, mut recv_stream) = wsio.split();
+        let send_stream = Rc::new(RefCell::new(send_stream));
 
-        let offer_sdp = wasm_peer.create_offer().await.unwrap();
-        let signaling_message = SignalMessage::Offer { sdp: offer_sdp };
-        let signaling_message = serde_json::to_string(&signaling_message).unwrap();
-        let send_message = WsMessage::Text(signaling_message);
-        let _ = send_stream.send(send_message).await;
+        let offer_sdp = match wasm_peer.create_offer().await {
+            Some(sdp) => sdp,
+            None => {
+                log!("failed to create offer");
+                return;
+            }
+        };
 
-        // now wait for message to send back answer
-        loop {
-            if let Some(WsMessage::Text(answer_string)) = recv_stream.next().await {
-                let parsed_answer = serde_json::from_str::<SignalMessage>(&answer_string).unwrap();
-                log!("received answer sdp: {}", parsed_answer.sdp());
-                wasm_peer
-                    .accept_answer(parsed_answer.sdp().clone())
-                    .await
-                    .unwrap();
-                break;
+        {
+            let msg = SignalMessage::Offer { sdp: offer_sdp };
+            let text = serde_json::to_string(&msg).unwrap();
+            if let Err(e) = send_stream.borrow_mut().send(WsMessage::Text(text)).await {
+                log!("failed to send offer: {:?}", e);
+                return;
             }
         }
+
+        let peer = wasm_peer.clone();
+        spawn_local(async move {
+            while let Some(msg) = recv_stream.next().await {
+                match msg {
+                    WsMessage::Text(text) => {
+                        let parsed = match serde_json::from_str::<SignalMessage>(&text) {
+                            Ok(v) => v,
+                            Err(e) => {
+                                log!("failed to parse signaling message: {:?}", e);
+                                continue;
+                            }
+                        };
+
+                        match parsed {
+                            SignalMessage::Answer { sdp } => {
+                                log!("received answer sdp");
+                                if let Err(e) = peer.accept_answer(sdp).await {
+                                    log!("failed to accept answer: {:?}", e);
+                                    return;
+                                }
+                            }
+                            SignalMessage::IceCandidate { candidate } => {
+                                if let Err(e) = peer.add_ice_candidate(candidate).await {
+                                    log!("failed to add remote ICE candidate: {:?}", e);
+                                }
+                            }
+                            SignalMessage::Offer { .. } => {
+                                log!("unexpected offer");
+                            }
+                        }
+                    }
+                    other => {
+                        log!("unexpected websocket message: {:?}", other);
+                    }
+                }
+            }
+        });
+
+        // Send local ICE candidates as they are gathered.
+        loop {
+            if wasm_peer.ice_connection_state() == RtcIceConnectionState::Completed
+                || wasm_peer.ice_gathering_state() == RtcIceGatheringState::Complete
+            {
+                log!("Ice is finished");
+                break;
+            }
+
+            let candidates = drain_local_ice_candidates(wasm_peer.clone());
+
+            for ice in candidates {
+                let msg = SignalMessage::IceCandidate {
+                    candidate: ice.candidate,
+                };
+                let text = serde_json::to_string(&msg).unwrap();
+                if let Err(e) = send_stream.borrow_mut().send(WsMessage::Text(text)).await {
+                    log!("failed to send ICE candidate: {:?}", e);
+                    return;
+                }
+            }
+
+            TimeoutFuture::new(25).await;
+        }
+
         // send until its open
         loop {
             if let Ok(_) = wasm_peer.send_text("Hello from WASM!".to_string()) {
@@ -351,7 +394,6 @@ fn connect_to_server(server_address: String) {
         }
     });
 }
-
 fn main() {
     console_error_panic_hook::set_once();
 
