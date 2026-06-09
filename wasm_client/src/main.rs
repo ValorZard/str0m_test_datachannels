@@ -267,6 +267,9 @@ fn install_data_channel_handlers(inner: &Rc<Inner>, dc: &RtcDataChannel) -> Resu
     Ok(())
 }
 
+// TODO: Make this not hardcoded at some point
+const SERVER_ADDRESS : &str = "ws://127.0.0.1:7000";
+
 fn main() {
     console_error_panic_hook::set_once();
     let wasm_peer = WasmPeer::new();

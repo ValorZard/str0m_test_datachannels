@@ -5,6 +5,7 @@ use futures_util::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Deserializer;
+use signaling_shared::SignalMessage;
 use tokio::{
     io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader},
     net::{
@@ -14,13 +15,6 @@ use tokio::{
 };
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, tungstenite};
 pub mod peer;
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum SignalMessage {
-    Offer { sdp: String },
-    Answer { sdp: String },
-}
 
 pub async fn write_msg<S>(
     sink: &mut SplitSink<WebSocketStream<S>, tungstenite::Message>,

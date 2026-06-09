@@ -4,10 +4,10 @@ use anyhow::{Result, anyhow, bail};
 use clap::{Parser, ValueEnum};
 use futures_util::StreamExt;
 use native_shared::{
-    SignalMessage,
     peer::{Peer, RoleAction},
     read_msg, write_msg,
 };
+use signaling_shared::SignalMessage;
 use serde_json::Deserializer;
 
 use tokio::{net::TcpListener, sync::oneshot, task::JoinSet};

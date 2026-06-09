@@ -760,6 +760,7 @@ dependencies = [
  "native_shared",
  "serde",
  "serde_json",
+ "signaling_shared",
  "tokio",
  "tokio-tungstenite",
 ]
@@ -772,6 +773,7 @@ dependencies = [
  "futures-util",
  "serde",
  "serde_json",
+ "signaling_shared",
  "str0m",
  "tokio",
  "tokio-tungstenite",
@@ -1227,6 +1229,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "signaling_shared"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "signature"
 version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1624,6 +1634,7 @@ dependencies = [
  "js-sys",
  "serde",
  "serde_json",
+ "signaling_shared",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
@@ -1649,6 +1660,7 @@ dependencies = [
  "native_shared",
  "serde",
  "serde_json",
+ "signaling_shared",
  "tokio",
  "tokio-tungstenite",
 ]
