@@ -1,3 +1,5 @@
+use std::net::IpAddr;
+
 use anyhow::{Result, anyhow, bail};
 use clap::{Parser, ValueEnum};
 use native_shared::{
@@ -6,11 +8,8 @@ use native_shared::{
     read_msg, write_msg,
 };
 use serde_json::Deserializer;
-use std::{
-    io::{BufReader, Write},
-    net::{IpAddr, TcpListener, TcpStream},
-};
-use tokio::sync::oneshot;
+
+use tokio::{net::TcpListener, sync::oneshot, task::JoinSet};
 
 #[derive(Debug, Parser)]
 struct Args {
@@ -48,22 +47,27 @@ async fn run_server(args: &Args) -> Result<()> {
         advertise_ip, args.server_udp_port
     );
 
-    let listener = TcpListener::bind((args.bind_ip, args.signal_port))?;
+    let listener = TcpListener::bind((args.bind_ip, args.signal_port)).await?;
     println!("server: signaling on {}:{}", args.bind_ip, args.signal_port);
 
-    let (mut stream, addr) = listener.accept()?;
-    println!("server: signaling connected from {addr}");
+    while let Ok((mut stream, addr)) = listener.accept().await {
+        println!("server: signaling connected from {addr}");
 
-    let offer = read_msg(stream.try_clone()?)?;
-    let answer_sdp = match offer {
-        SignalMessage::Offer { sdp } => peer.accept_offer(&sdp)?,
-        _ => bail!("expected offer"),
-    };
+        let (mut read_stream, mut write_stream) = stream.split();
 
-    write_msg(&mut stream, &SignalMessage::Answer { sdp: answer_sdp })?;
+        let offer = read_msg(&mut read_stream).await?;
+        let answer_sdp = match offer {
+            SignalMessage::Offer { sdp } => peer.accept_offer(&sdp)?,
+            _ => bail!("expected offer"),
+        };
 
-    let (tx, _rx) = oneshot::channel::<Vec<u8>>();
-    peer.run("server", RoleAction::EchoServer, tx).await
+        write_msg(&mut write_stream, &SignalMessage::Answer { sdp: answer_sdp }).await?;
+
+        let (tx, _rx) = oneshot::channel::<Vec<u8>>();
+        peer.run("server", RoleAction::EchoServer, tx).await?
+    }
+
+    Ok(())
 }
 
 #[tokio::main]

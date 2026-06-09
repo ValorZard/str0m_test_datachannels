@@ -7,10 +7,9 @@ use native_shared::{
 };
 use serde_json::Deserializer;
 use std::{
-    io::{BufReader, Write},
-    net::{IpAddr, TcpListener, TcpStream},
+    net::{IpAddr},
 };
-use tokio::sync::oneshot;
+use tokio::{net::TcpStream, sync::oneshot};
 
 #[derive(Debug, Parser)]
 struct Args {
@@ -50,16 +49,17 @@ async fn run_client(args: &Args) -> Result<()> {
         advertise_ip, args.client_udp_port
     );
 
-    let mut stream = TcpStream::connect((server_ip, args.signal_port))?;
+    let mut stream = TcpStream::connect((server_ip, args.signal_port)).await?;
     println!(
         "client: signaling connected to {}:{}",
         server_ip, args.signal_port
     );
 
     let offer_sdp = peer.create_offer("chat")?;
-    write_msg(&mut stream, &SignalMessage::Offer { sdp: offer_sdp })?;
+    let (mut read_half, mut write_half) = stream.split();
+    write_msg(&mut write_half, &SignalMessage::Offer { sdp: offer_sdp }).await?;
 
-    let answer = read_msg(stream.try_clone()?)?;
+    let answer = read_msg(&mut read_half).await?;
     match answer {
         SignalMessage::Answer { sdp } => peer.accept_answer(&sdp)?,
         _ => bail!("expected answer"),
