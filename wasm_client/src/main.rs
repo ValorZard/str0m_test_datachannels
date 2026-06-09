@@ -1,16 +1,27 @@
 use anyhow::{Result, anyhow};
+use futures_util::{SinkExt, StreamExt};
 use js_sys::{Array, Uint8Array};
 use serde::{Deserialize, Serialize};
+use signaling_shared::SignalMessage;
 use std::{cell::RefCell, rc::Rc};
 use wasm_bindgen::JsCast;
 use wasm_bindgen::closure::Closure;
 use wasm_bindgen::prelude::*;
-use wasm_bindgen_futures::JsFuture;
+use wasm_bindgen_futures::{JsFuture, spawn_local};
 use web_sys::{
     Event, MessageEvent, RtcConfiguration, RtcDataChannel, RtcDataChannelEvent, RtcIceCandidate,
     RtcIceCandidateInit, RtcIceServer, RtcPeerConnection, RtcPeerConnectionIceEvent, RtcSdpType,
     RtcSessionDescriptionInit,
 };
+use ws_stream_wasm::{WsMessage, WsMeta};
+
+#[macro_export]
+macro_rules! log {
+    ($($arg:tt)*) => {
+        web_sys::console::log_1(&format!($($arg)*).into());
+    };
+}
+
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IceCandidateMessage {
@@ -59,13 +70,14 @@ impl WasmPeer {
         Ok(WasmPeer { inner })
     }
 
-    pub async fn create_offer(&self, channel_label: String) -> Option<String> {
-        let dc = self.inner.pc.create_data_channel(&channel_label);
-        install_data_channel_handlers(&self.inner, &dc).unwrap();
-        self.inner.data_channel.replace(Some(dc));
+    pub async fn create_offer(&self) -> Option<String> {
+        // first create an internal data channel to initalize the peer connection
+        let _dc = self.inner.pc.create_data_channel("test");
 
-        let offer_val = JsFuture::from(self.inner.pc.create_offer()).await.unwrap();
-        let offer: RtcSessionDescriptionInit = offer_val.dyn_into().unwrap();
+        let offer_val = JsFuture::from(self.inner.pc.create_offer()).await;
+        log!("offer created {:?}", offer_val);
+        let offer_val = offer_val.unwrap();
+        let offer: RtcSessionDescriptionInit = offer_val.unchecked_into();
 
         JsFuture::from(self.inner.pc.set_local_description(&offer))
             .await
@@ -185,13 +197,13 @@ impl WasmPeer {
 
 fn make_rtc_config() -> RtcConfiguration {
     let mut stun = RtcIceServer::new();
-    stun.urls(&JsValue::from_str("stun:stun.l.google.com:19302"));
+    stun.set_urls(&JsValue::from_str("stun:stun.l.google.com:19302"));
 
     let servers = Array::new();
     servers.push(&stun);
 
     let mut config = RtcConfiguration::new();
-    config.ice_servers(&servers);
+    config.set_ice_servers(&servers);
     config
 }
 
@@ -268,9 +280,37 @@ fn install_data_channel_handlers(inner: &Rc<Inner>, dc: &RtcDataChannel) -> Resu
 }
 
 // TODO: Make this not hardcoded at some point
-const SERVER_ADDRESS : &str = "ws://127.0.0.1:7000";
+const SERVER_ADDRESS: &str = "ws://127.0.0.1:7000";
 
 fn main() {
     console_error_panic_hook::set_once();
-    let wasm_peer = WasmPeer::new();
+
+    spawn_local(async {
+        let wasm_peer = WasmPeer::new().expect("should work");
+
+        let (ws, wsio) = match WsMeta::connect(SERVER_ADDRESS, None).await {
+            Ok(parts) => parts,
+            Err(e) => {
+                log!("WebSocket connect failed for {}: {:?}", SERVER_ADDRESS, e);
+                return;
+            }
+        };
+
+        let (mut send_stream, mut recv_stream) = wsio.split();
+
+        let offer_sdp = wasm_peer.create_offer().await.unwrap();
+        let signaling_message = SignalMessage::Offer { sdp: offer_sdp };
+        let signaling_message = serde_json::to_string(&signaling_message).unwrap();
+        let send_message = WsMessage::Text(signaling_message);
+        let _ = send_stream.send(send_message).await;
+
+        // now wait for message to send back answer
+        loop {
+            if let Some(WsMessage::Text(answer_string)) = recv_stream.next().await {
+                let parsed_answer = serde_json::from_str::<SignalMessage>(&answer_string).unwrap();
+                wasm_peer.accept_answer(parsed_answer.sdp().clone()).await.unwrap();
+                break;
+            }
+        }
+    });
 }
