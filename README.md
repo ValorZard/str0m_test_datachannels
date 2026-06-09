@@ -1,3 +1,12 @@
+# str0m datachannel test
+Connect to a str0m webrtc peer through either a native client (using str0m itself) or a WASM client.
+
+native str0m client can bypass using STUN/TURN by just sending its own IP address directly.
+
+WASM Client has to use STUN/TURN/ICE trickling. 
+
+(Note: for some reason, this doesn't work on firefox for now.)
+
 # How to build for Linux
 ``cross build --target x86_64-unknown-linux-gnu # can do release version by adding --release``
 
