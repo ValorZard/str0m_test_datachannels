@@ -25,11 +25,8 @@ struct Args {
     #[arg(long, default_value_t = 7000)]
     signal_port: u16,
 
-    #[arg(long, default_value_t = 5000)]
-    server_udp_port: u16,
-
     #[arg(long, default_value_t = 5001)]
-    client_udp_port: u16,
+    udp_port: u16,
 
     #[arg(long, default_value = "hello from client")]
     message: String,
@@ -42,11 +39,11 @@ async fn run_client(args: &Args) -> Result<()> {
 
     let advertise_ip = args.advertise_ip.unwrap_or(args.bind_ip);
 
-    let mut peer = Peer::new(args.bind_ip, advertise_ip, args.client_udp_port).await?;
+    let mut peer = Peer::new(args.bind_ip, advertise_ip, args.udp_port).await?;
     println!("client: UDP bound on {}", peer.local_addr);
     println!(
         "client: advertising ICE candidate {}:{}",
-        advertise_ip, args.client_udp_port
+        advertise_ip, args.udp_port
     );
 
     let mut stream = TcpStream::connect((server_ip, args.signal_port)).await?;
