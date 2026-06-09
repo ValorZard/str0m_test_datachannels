@@ -26,7 +26,8 @@ cargo run -p client -- --advertise-ip 127.0.0.1 --server-ip 127.0.0.1
 ### WASM Client:
 
 ```bash
-trunk serve # hardcoded server path for now
+cs wasm_client
+trunk serve
 ```
 
 
