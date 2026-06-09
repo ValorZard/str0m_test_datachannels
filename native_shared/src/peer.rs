@@ -46,10 +46,7 @@ impl Peer {
         }
 
         let lookup = format!("{host}:{port}");
-        let resolved = lookup
-            .to_socket_addrs()
-            .ok()?
-            .next()?.ip();
+        let resolved = lookup.to_socket_addrs().ok()?.next()?.ip();
 
         parts[4] = resolved.to_string();
 
@@ -112,10 +109,7 @@ impl Peer {
         Ok(())
     }
 
-    pub fn add_remote_ice_candidate(
-    &mut self,
-    candidate: String,
-    ) -> Result<()> {
+    pub fn add_remote_ice_candidate(&mut self, candidate: String) -> Result<()> {
         let candidate = candidate.trim().to_string();
         if candidate.is_empty() {
             // Browser emits empty candidate as end-of-candidates; nothing to add.
@@ -124,17 +118,15 @@ impl Peer {
 
         println!("Incoming remote candidate {candidate}");
 
-        let normalized_candidate = Self::resolve_mdns_candidate(&candidate)
-            .unwrap_or_else(|| candidate.clone());
+        let normalized_candidate =
+            Self::resolve_mdns_candidate(&candidate).unwrap_or_else(|| candidate.clone());
 
         match Candidate::from_sdp_string(&normalized_candidate) {
             Ok(candidate) => {
                 self.rtc.add_remote_candidate(candidate);
             }
             Err(err) => {
-                eprintln!(
-                    "ignoring unsupported remote ICE candidate: {candidate} ({err})"
-                );
+                eprintln!("ignoring unsupported remote ICE candidate: {candidate} ({err})");
             }
         }
         Ok(())

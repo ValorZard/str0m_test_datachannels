@@ -117,10 +117,7 @@ impl WasmPeer {
         Ok(())
     }
 
-    pub async fn add_ice_candidate(
-        &self,
-        candidate: String,
-    ) -> Result<(), JsValue> {
+    pub async fn add_ice_candidate(&self, candidate: String) -> Result<(), JsValue> {
         let init = RtcIceCandidateInit::new(&candidate);
         let candidate = RtcIceCandidate::new(&init)?;
         JsFuture::from(
@@ -283,7 +280,11 @@ fn install_data_channel_handlers(inner: &Rc<Inner>, dc: &RtcDataChannel) -> Resu
 }
 
 pub fn drain_local_ice_candidates(peer: Rc<WasmPeer>) -> Vec<IceCandidateMessage> {
-        peer.inner.pending_local_ice.borrow_mut().drain(..).collect()
+    peer.inner
+        .pending_local_ice
+        .borrow_mut()
+        .drain(..)
+        .collect()
 }
 // TODO: Make this not hardcoded at some point
 const SERVER_ADDRESS: &str = "ws://127.0.0.1:7000";
@@ -363,13 +364,8 @@ fn connect_to_server(server_address: String) {
                                 return;
                             }
                         }
-                        SignalMessage::IceCandidate {
-                            candidate,
-                        } => {
-                            if let Err(e) = wasm_peer
-                                .add_ice_candidate(candidate)
-                                .await
-                            {
+                        SignalMessage::IceCandidate { candidate } => {
+                            if let Err(e) = wasm_peer.add_ice_candidate(candidate).await {
                                 log!("failed to add remote ICE candidate: {:?}", e);
                             }
                         }

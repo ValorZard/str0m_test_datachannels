@@ -85,7 +85,7 @@ async fn run_client(args: &Args) -> Result<()> {
         None,
         tx,
     )
-        .await
+    .await
 }
 
 #[tokio::main]
