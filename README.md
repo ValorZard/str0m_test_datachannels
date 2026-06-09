@@ -12,8 +12,9 @@ WASM Client has to use STUN/TURN/ICE trickling.
 ## Localhost test
 
 ### Server:
+
 ```bash
-cargo run -p server -- --advertise-ip 127.0.0.1
+cargo run -p webrtc_server
 ```
 
 Note: running the server locally will require the server to generate a non-loopback address for certain targets to connect to it properly.
@@ -33,7 +34,7 @@ This is because firefox doesn't like it when you connect to WebRTC using a loopb
 ### Native Client:
 
 ```bash
-cargo run -p client -- --advertise-ip 127.0.0.1 --server-ip 127.0.0.1
+cargo run -p client -- --advertise-ip 127.0.0.1 --server-addr "ws://127.0.0.1:7000"
 ```
 
 ### WASM Client:
@@ -54,5 +55,5 @@ cargo run -p server -- --advertise-ip YOUR_PUBLIC_SERVER_IP
 On the client machine:
 
 ```bash
-cargo run -p client -- --server-ip YOUR_PUBLIC_SERVER_IP --advertise-ip YOUR_CLIENT_PUBLIC_IP
+cargo run -p client -- --server-addr YOUR_PUBLIC_SERVER_ADDR --advertise-ip YOUR_CLIENT_PUBLIC_IP
 ```

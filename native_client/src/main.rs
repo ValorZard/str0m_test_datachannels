@@ -20,10 +20,7 @@ struct Args {
     advertise_ip: Option<IpAddr>,
 
     #[arg(long)]
-    server_ip: Option<IpAddr>,
-
-    #[arg(long, default_value_t = 7000)]
-    signal_port: u16,
+    server_addr: String,
 
     #[arg(long, default_value_t = 5001)]
     udp_port: u16,
@@ -33,9 +30,8 @@ struct Args {
 }
 
 async fn run_client(args: &Args) -> Result<()> {
-    let server_ip = args
-        .server_ip
-        .ok_or_else(|| anyhow!("--server-ip is required in client mode"))?;
+    let server_addr = &args
+        .server_addr;
 
     let advertise_ip = args.advertise_ip.unwrap_or(args.bind_ip);
 
@@ -46,12 +42,10 @@ async fn run_client(args: &Args) -> Result<()> {
         advertise_ip, args.udp_port
     );
 
-    let server_addr = format!("ws://{server_ip}:{}", args.signal_port);
-    println!("connecting to signaling server {server_addr}");
+    println!("connecting to websocket signaling server {server_addr}");
     let (stream, response) = connect_async(server_addr).await?;
     println!(
-        "client: signaling connected to {}:{}",
-        server_ip, args.signal_port
+        "client: signaling connected to {server_addr}"
     );
     println!("client: initial response from server {response:?}");
 
