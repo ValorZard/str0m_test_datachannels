@@ -26,6 +26,7 @@ pub struct Peer {
 
 impl Peer {
     pub async fn new(bind_ip: IpAddr, advertise_ip: IpAddr, udp_port: u16) -> Result<Self> {
+        str0m::crypto::from_feature_flags().install_process_default();
         let std_socket = std::net::UdpSocket::bind(SocketAddr::new(bind_ip, udp_port))?;
         std_socket.set_nonblocking(true)?;
         let socket = UdpSocket::from_std(std_socket)?;
