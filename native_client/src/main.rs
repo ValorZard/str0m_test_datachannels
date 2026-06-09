@@ -1,5 +1,10 @@
 use anyhow::{Result, anyhow, bail};
 use clap::{Parser, ValueEnum};
+use native_shared::{
+    SignalMessage,
+    peer::{Peer, RoleAction},
+    read_msg, write_msg,
+};
 use serde_json::Deserializer;
 use std::{
     io::{BufReader, Write},
@@ -7,23 +12,8 @@ use std::{
 };
 use tokio::sync::oneshot;
 
-mod common;
-mod peer;
-
-use common::SignalMessage;
-use peer::{Peer, RoleAction};
-
-#[derive(Debug, Clone, Copy, ValueEnum)]
-enum Mode {
-    Server,
-    Client,
-}
-
 #[derive(Debug, Parser)]
 struct Args {
-    #[arg(long, value_enum)]
-    mode: Mode,
-
     #[arg(long, default_value = "0.0.0.0")]
     bind_ip: IpAddr,
 
@@ -44,51 +34,6 @@ struct Args {
 
     #[arg(long, default_value = "hello from client")]
     message: String,
-}
-
-fn write_msg(stream: &mut TcpStream, msg: &SignalMessage) -> Result<()> {
-    let json = serde_json::to_string(msg)?;
-    stream.write_all(json.as_bytes())?;
-    stream.write_all(b"\n")?;
-    Ok(())
-}
-
-fn read_msg(stream: TcpStream) -> Result<SignalMessage> {
-    let reader = BufReader::new(stream);
-    let mut de = Deserializer::from_reader(reader).into_iter::<SignalMessage>();
-    de.next()
-        .ok_or_else(|| anyhow!("no signal message"))?
-        .map_err(Into::into)
-}
-
-async fn run_server(args: &Args) -> Result<()> {
-    let advertise_ip = args
-        .advertise_ip
-        .ok_or_else(|| anyhow!("--advertise-ip is required in server mode"))?;
-
-    let mut peer = Peer::new(args.bind_ip, advertise_ip, args.server_udp_port).await?;
-    println!("server: UDP bound on {}", peer.local_addr);
-    println!(
-        "server: advertising ICE candidate {}:{}",
-        advertise_ip, args.server_udp_port
-    );
-
-    let listener = TcpListener::bind((args.bind_ip, args.signal_port))?;
-    println!("server: signaling on {}:{}", args.bind_ip, args.signal_port);
-
-    let (mut stream, addr) = listener.accept()?;
-    println!("server: signaling connected from {addr}");
-
-    let offer = read_msg(stream.try_clone()?)?;
-    let answer_sdp = match offer {
-        SignalMessage::Offer { sdp } => peer.accept_offer(&sdp)?,
-        _ => bail!("expected offer"),
-    };
-
-    write_msg(&mut stream, &SignalMessage::Answer { sdp: answer_sdp })?;
-
-    let (tx, _rx) = oneshot::channel::<Vec<u8>>();
-    peer.run("server", RoleAction::EchoServer, tx).await
 }
 
 async fn run_client(args: &Args) -> Result<()> {
@@ -140,12 +85,9 @@ async fn run_client(args: &Args) -> Result<()> {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    str0m::crypto::from_feature_flags().install_process_default();
-
     let args = Args::parse();
 
-    match args.mode {
-        Mode::Server => run_server(&args).await,
-        Mode::Client => run_client(&args).await,
-    }
+    run_client(&args).await?;
+
+    Ok(())
 }
