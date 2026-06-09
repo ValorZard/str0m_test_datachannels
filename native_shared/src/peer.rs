@@ -28,6 +28,7 @@ pub struct Peer {
 }
 
 impl Peer {
+    // some of the ice candidates are mDNS, convert to IP to properly digest them
     fn resolve_mdns_candidate(candidate: &str) -> Option<String> {
         let mut parts: Vec<String> = candidate
             .split_whitespace()
@@ -48,12 +49,15 @@ impl Peer {
         let resolved = lookup
             .to_socket_addrs()
             .ok()?
-            .find(|addr| addr.ip().is_ipv4())
-            .map(|addr| addr.ip())
-            .or_else(|| lookup.to_socket_addrs().ok()?.next().map(|addr| addr.ip()))?;
+            .next()?.ip();
 
         parts[4] = resolved.to_string();
-        Some(parts.join(" "))
+
+        let converted_candidate = parts.join(" ");
+
+        println!("Converted mDNS to IP -> {converted_candidate}");
+
+        Some(converted_candidate)
     }
 
     pub async fn new(bind_ip: IpAddr, advertise_ip: IpAddr, udp_port: u16) -> Result<Self> {
@@ -112,10 +116,13 @@ impl Peer {
     &mut self,
     candidate: String,
     ) -> Result<()> {
-        if candidate.trim().is_empty() {
+        let candidate = candidate.trim().to_string();
+        if candidate.is_empty() {
             // Browser emits empty candidate as end-of-candidates; nothing to add.
             return Ok(());
         }
+
+        println!("Incoming remote candidate {candidate}");
 
         let normalized_candidate = Self::resolve_mdns_candidate(&candidate)
             .unwrap_or_else(|| candidate.clone());
