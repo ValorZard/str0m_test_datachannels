@@ -71,7 +71,7 @@ impl Peer {
 
     pub async fn run(
         &mut self,
-        role_name: &str,
+        peer_name: &str,
         action: RoleAction,
         done_tx: oneshot::Sender<Vec<u8>>,
     ) -> Result<()> {
@@ -90,10 +90,10 @@ impl Peer {
                     }
                     Output::Event(event) => match event {
                         Event::Connected => {
-                            println!("{role_name}: connected");
+                            println!("{peer_name}: connected");
                         }
                         Event::ChannelOpen(cid, label) => {
-                            println!("{role_name}: channel open: {label:?}");
+                            println!("{peer_name}: channel open: {label:?}");
                             channel_id = Some(cid);
 
                             if let RoleAction::EchoServer = action {
@@ -106,7 +106,7 @@ impl Peer {
                         }
                         Event::ChannelData(data) => {
                             println!(
-                                "{role_name}: got data: {:?}",
+                                "{peer_name}: got data: {:?}",
                                 String::from_utf8_lossy(&data.data)
                             );
 
@@ -131,7 +131,7 @@ impl Peer {
                             }
                         }
                         other => {
-                            println!("{role_name}: event: {other:?}");
+                            println!("{peer_name}: event: {other:?}");
                         }
                     },
                 }
@@ -143,7 +143,7 @@ impl Peer {
                         if let Some(mut ch) = self.rtc.channel(cid) {
                             ch.write(false, message)?;
                             println!(
-                                "{role_name}: sent data: {:?}",
+                                "{peer_name}: sent data: {:?}",
                                 String::from_utf8_lossy(message)
                             );
                             sent = true;
