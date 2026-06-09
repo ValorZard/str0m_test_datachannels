@@ -1,7 +1,18 @@
 use anyhow::{Result, anyhow, bail};
+use futures_util::{
+    SinkExt, StreamExt,
+    stream::{SplitSink, SplitStream},
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Deserializer;
-use tokio::{io::{AsyncBufReadExt, AsyncWriteExt, BufReader}, net::{TcpStream, tcp::{ReadHalf, WriteHalf}}};
+use tokio::{
+    io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader},
+    net::{
+        TcpStream,
+        tcp::{ReadHalf, WriteHalf},
+    },
+};
+use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, tungstenite};
 pub mod peer;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -11,22 +22,47 @@ pub enum SignalMessage {
     Answer { sdp: String },
 }
 
-pub async fn write_msg(stream: &mut WriteHalf<'_>, msg: &SignalMessage) -> Result<()> {
+pub async fn write_msg<S>(
+    sink: &mut SplitSink<WebSocketStream<S>, tungstenite::Message>,
+    msg: &SignalMessage,
+) -> Result<()>
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
     let json = serde_json::to_string(msg)?;
-    stream.write_all(json.as_bytes()).await?;
-    stream.write_all(b"\n").await?;
+    let send_message = tungstenite::Message::Text(json.into());
+    sink.send(send_message).await?;
     Ok(())
 }
 
-pub async fn read_msg(stream: &mut ReadHalf<'_>) -> Result<SignalMessage> {
-    let mut reader = BufReader::new(stream);
-    let mut line = String::new();
+pub async fn read_msg<S>(stream: &mut SplitStream<WebSocketStream<S>>) -> Result<SignalMessage>
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
+    loop {
+        let msg = stream
+            .next()
+            .await
+            .ok_or_else(|| anyhow!("no signal message"))??;
 
-    let n = reader.read_line(&mut line).await?;
-    if n == 0 {
-        return Err(anyhow!("no signal message"));
+        match msg {
+            tungstenite::Message::Text(text) => {
+                let parsed = serde_json::from_str::<SignalMessage>(&text)?;
+                return Ok(parsed);
+            }
+            tungstenite::Message::Binary(bytes) => {
+                let parsed = serde_json::from_slice::<SignalMessage>(&bytes)?;
+                return Ok(parsed);
+            }
+            tungstenite::Message::Ping(_) | tungstenite::Message::Pong(_) => {
+                continue;
+            }
+            tungstenite::Message::Close(_) => {
+                return Err(anyhow!("websocket closed"));
+            }
+            _ => {
+                continue;
+            }
+        }
     }
-
-    let msg = serde_json::from_str::<SignalMessage>(line.trim_end())?;
-    Ok(msg)
 }

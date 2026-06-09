@@ -1,10 +1,10 @@
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use js_sys::{Array, Uint8Array};
 use serde::{Deserialize, Serialize};
 use std::{cell::RefCell, rc::Rc};
+use wasm_bindgen::JsCast;
 use wasm_bindgen::closure::Closure;
 use wasm_bindgen::prelude::*;
-use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{
     Event, MessageEvent, RtcConfiguration, RtcDataChannel, RtcDataChannelEvent, RtcIceCandidate,
@@ -67,7 +67,9 @@ impl WasmPeer {
         let offer_val = JsFuture::from(self.inner.pc.create_offer()).await.unwrap();
         let offer: RtcSessionDescriptionInit = offer_val.dyn_into().unwrap();
 
-        JsFuture::from(self.inner.pc.set_local_description(&offer)).await.unwrap();
+        JsFuture::from(self.inner.pc.set_local_description(&offer))
+            .await
+            .unwrap();
 
         offer.get_sdp()
     }
@@ -76,12 +78,16 @@ impl WasmPeer {
         let remote = RtcSessionDescriptionInit::new(RtcSdpType::Offer);
         remote.set_sdp(&sdp_offer);
 
-        JsFuture::from(self.inner.pc.set_remote_description(&remote)).await.unwrap();
+        JsFuture::from(self.inner.pc.set_remote_description(&remote))
+            .await
+            .unwrap();
 
         let answer_val = JsFuture::from(self.inner.pc.create_answer()).await.unwrap();
         let answer: RtcSessionDescriptionInit = answer_val.dyn_into().unwrap();
 
-        JsFuture::from(self.inner.pc.set_local_description(&answer)).await.unwrap();
+        JsFuture::from(self.inner.pc.set_local_description(&answer))
+            .await
+            .unwrap();
 
         answer.get_sdp()
     }
@@ -193,11 +199,14 @@ fn install_peer_handlers(inner: &Rc<Inner>) -> Result<(), JsValue> {
     let inner_for_ice = Rc::clone(inner);
     let on_ice = Closure::wrap(Box::new(move |e: RtcPeerConnectionIceEvent| {
         if let Some(candidate) = e.candidate() {
-            inner_for_ice.pending_local_ice.borrow_mut().push(IceCandidateMessage {
-                candidate: candidate.candidate(),
-                sdp_mid: candidate.sdp_mid(),
-                sdp_mline_index: candidate.sdp_m_line_index(),
-            });
+            inner_for_ice
+                .pending_local_ice
+                .borrow_mut()
+                .push(IceCandidateMessage {
+                    candidate: candidate.candidate(),
+                    sdp_mid: candidate.sdp_mid(),
+                    sdp_mline_index: candidate.sdp_m_line_index(),
+                });
         }
     }) as Box<dyn FnMut(_)>);
     inner
@@ -261,5 +270,4 @@ fn install_data_channel_handlers(inner: &Rc<Inner>, dc: &RtcDataChannel) -> Resu
 fn main() {
     console_error_panic_hook::set_once();
     let wasm_peer = WasmPeer::new();
-
 }
