@@ -8,11 +8,18 @@
 ```bash
 cargo run -p server -- --advertise-ip 127.0.0.1
 ```
-### Client:
+### Native Client:
 
 ```bash
 cargo run -p client -- --advertise-ip 127.0.0.1 --server-ip 127.0.0.1
 ```
+
+### WASM Client:
+
+```bash
+trunk serve # hardcoded server path for now
+```
+
 
 ## Real remote server
 
