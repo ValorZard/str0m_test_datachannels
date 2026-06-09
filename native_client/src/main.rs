@@ -40,7 +40,7 @@ async fn run_client(args: &Args) -> Result<()> {
     let advertise_ip = args.advertise_ip.unwrap_or(args.bind_ip);
 
     let mut peer = Peer::new(args.bind_ip, advertise_ip, args.udp_port).await?;
-    println!("client: UDP bound on {}", peer.local_addr);
+    println!("client: UDP bound on {}", peer.bound_addr);
     println!(
         "client: advertising ICE candidate {}:{}",
         advertise_ip, args.udp_port

@@ -77,6 +77,15 @@ impl Peer {
         Ok(())
     }
 
+    pub fn add_remote_ice_candidate(
+    &mut self,
+    candidate: String,
+    ) -> Result<()> {
+        let candidate = Candidate::from_sdp_string(&candidate)?;
+        self.rtc.add_remote_candidate(candidate);
+        Ok(())
+    }
+
     pub async fn run(
         &mut self,
         peer_name: &str,
