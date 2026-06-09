@@ -18,24 +18,28 @@ fn detect_primary_local_ip() -> Option<IpAddr> {
     Some(socket.local_addr().ok()?.ip())
 }
 
-fn choose_advertise_ip(args: &Args, signaling_peer_ip: IpAddr) -> IpAddr {
-    if let Some(ip) = args.advertise_ip {
-        return ip;
-    }
-
-    if !args.bind_ip.is_unspecified() {
-        return args.bind_ip;
-    }
-
-    if signaling_peer_ip.is_loopback() {
-        if let Some(ip) = detect_primary_local_ip() {
-            if !ip.is_loopback() {
-                return ip;
+// Attempt to generate a non-loopback advertising ip for local testing
+fn choose_advertise_ip(args: &Args) -> Option<IpAddr> {
+    match args.advertise_ip {
+        None => {
+            if let Some(ip) = detect_primary_local_ip() {
+                if !ip.is_loopback() {
+                    return Some(ip);
+                }
             }
+            None
+        }
+        Some(ip) => {
+            if ip.is_loopback() {
+                if let Some(new_ip) = detect_primary_local_ip() {
+                    if !new_ip.is_loopback() {
+                        return Some(new_ip);
+                    }
+                }
+            }
+            Some(ip)
         }
     }
-
-    signaling_peer_ip
 }
 
 #[derive(Debug, Parser)]
@@ -56,10 +60,15 @@ struct Args {
 async fn run_server(args: &Args) -> Result<()> {
     let listener = TcpListener::bind((args.bind_ip, args.signal_port)).await?;
     println!("server: signaling on {}:{}", args.bind_ip, args.signal_port);
+    // this is only really necessary if you are testing server and client on same machine
+    let advertise_ip =
+        choose_advertise_ip(args).expect("a proper advertising_address should be generated");
+    println!("Advertising server on '{advertise_ip}'");
+    println!(
+        "Note that if you are running this over the internet proper, the ip of the remote machine you are running this one has to be passed through to the server process itself as the advertise_ip."
+    );
 
     while let Ok((raw_stream, addr)) = listener.accept().await {
-        // this is only really necessary if you are testing server and client on same machine
-        let advertise_ip = choose_advertise_ip(args, addr.ip());
         if addr.ip().is_loopback() && !advertise_ip.is_loopback() {
             eprintln!(
                 "server: info: signaling peer is loopback ({addr}), advertising non-loopback ICE IP {advertise_ip} for browser compatibility"

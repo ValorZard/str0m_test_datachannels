@@ -10,7 +10,10 @@ use wasm_bindgen::closure::Closure;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::{JsFuture, spawn_local};
 use web_sys::{
-    Element, Event, HtmlButtonElement, HtmlElement, HtmlInputElement, MessageEvent, RtcConfiguration, RtcDataChannel, RtcDataChannelEvent, RtcIceCandidate, RtcIceCandidateInit, RtcIceConnectionState, RtcIceGatheringState, RtcIceServer, RtcPeerConnection, RtcPeerConnectionIceEvent, RtcSdpType, RtcSessionDescriptionInit
+    Element, Event, HtmlButtonElement, HtmlElement, HtmlInputElement, MessageEvent,
+    RtcConfiguration, RtcDataChannel, RtcDataChannelEvent, RtcIceCandidate, RtcIceCandidateInit,
+    RtcIceConnectionState, RtcIceGatheringState, RtcIceServer, RtcPeerConnection,
+    RtcPeerConnectionIceEvent, RtcSdpType, RtcSessionDescriptionInit,
 };
 use ws_stream_wasm::{WsMessage, WsMeta};
 
@@ -358,7 +361,9 @@ fn connect_to_server(server_address: String) {
 
         // Send local ICE candidates as they are gathered.
         loop {
-            if wasm_peer.ice_connection_state() == RtcIceConnectionState::Completed || wasm_peer.ice_gathering_state() == RtcIceGatheringState::Complete {
+            if wasm_peer.ice_connection_state() == RtcIceConnectionState::Completed
+                || wasm_peer.ice_gathering_state() == RtcIceGatheringState::Complete
+            {
                 log!("Ice is finished");
                 break;
             }

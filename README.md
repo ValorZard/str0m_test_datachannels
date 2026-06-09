@@ -16,11 +16,16 @@ WASM Client has to use STUN/TURN/ICE trickling.
 cargo run -p server -- --advertise-ip 127.0.0.1
 ```
 
-Note: if you are connecting to the server from firefox WASM on the same computer, make sure you advertise an IP that's not localhost.
+Note: running the server locally will require the server to generate a non-loopback address for certain targets to connect to it properly.
 
 for example:
 ```bash
-cargo run -p webrtc_server  -- --bind-ip 0.0.0.0 --advertise-ip 10.0.1.130 --signal-port 7000 --udp-port 5000
+PS C:\github\str0m_test_datachannels> cargo run -p webrtc_server -- --bind-ip 0.0.0.0 --signal-port 7000 --udp-port 5000
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.22s
+     Running `target\debug\webrtc_server.exe --bind-ip 0.0.0.0 --signal-port 7000 --udp-port 5000`
+server: signaling on 0.0.0.0:7000
+Advertising server on '10.1.2.145'
+Note that if you are running this over the internet proper, the ip of the remote machine you are running this one has to be passed through to the server process itself as the advertise_ip.
 ```
 
 This is because firefox doesn't like it when you connect to WebRTC using a loopback address.
