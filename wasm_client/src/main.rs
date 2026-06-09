@@ -1,5 +1,6 @@
 use anyhow::{Result, anyhow};
 use futures_util::{SinkExt, StreamExt};
+use gloo_timers::future::TimeoutFuture;
 use js_sys::{Array, Uint8Array};
 use serde::{Deserialize, Serialize};
 use signaling_shared::SignalMessage;
@@ -71,18 +72,23 @@ impl WasmPeer {
 
     pub async fn create_offer(&self) -> Option<String> {
         // first create an internal data channel to initalize the peer connection
-        let _dc = self.inner.pc.create_data_channel("test");
+        let dc = self.inner.pc.create_data_channel("test");
+        install_data_channel_handlers(&self.inner, &dc).ok()?;
+        self.inner.data_channel.replace(Some(dc));
 
-        let offer_val = JsFuture::from(self.inner.pc.create_offer()).await;
-        log!("offer created {:?}", offer_val);
-        let offer_val = offer_val.unwrap();
+        let offer_val = JsFuture::from(self.inner.pc.create_offer()).await.ok()?;
         let offer: RtcSessionDescriptionInit = offer_val.unchecked_into();
 
         JsFuture::from(self.inner.pc.set_local_description(&offer))
             .await
-            .unwrap();
+            .ok()?;
 
-        offer.get_sdp()
+        // TODO: Add trickle ice
+        wait_for_ice_gathering_complete(&self.inner.pc).await;
+
+        let local = self.inner.pc.local_description()?;
+        log!("local description after gathering: {:?}", local.sdp());
+        Some(local.sdp())
     }
 
     pub async fn accept_offer(&self, sdp_offer: String) -> Option<String> {
@@ -210,6 +216,7 @@ fn install_peer_handlers(inner: &Rc<Inner>) -> Result<(), JsValue> {
     let inner_for_ice = Rc::clone(inner);
     let on_ice = Closure::wrap(Box::new(move |e: RtcPeerConnectionIceEvent| {
         if let Some(candidate) = e.candidate() {
+            log!("{:?}", candidate);
             inner_for_ice
                 .pending_local_ice
                 .borrow_mut()
@@ -278,6 +285,16 @@ fn install_data_channel_handlers(inner: &Rc<Inner>, dc: &RtcDataChannel) -> Resu
     Ok(())
 }
 
+async fn wait_for_ice_gathering_complete(pc: &RtcPeerConnection) {
+    loop {
+        log!("{:?}", pc.ice_gathering_state());
+        if pc.ice_gathering_state() == web_sys::RtcIceGatheringState::Complete {
+            break;
+        }
+        TimeoutFuture::new(50).await;
+    }
+}
+
 // TODO: Make this not hardcoded at some point
 const SERVER_ADDRESS: &str = "ws://127.0.0.1:7000";
 
@@ -307,6 +324,7 @@ fn main() {
         loop {
             if let Some(WsMessage::Text(answer_string)) = recv_stream.next().await {
                 let parsed_answer = serde_json::from_str::<SignalMessage>(&answer_string).unwrap();
+                log!("received answer sdp: {}", parsed_answer.sdp());
                 wasm_peer
                     .accept_answer(parsed_answer.sdp().clone())
                     .await
@@ -314,5 +332,6 @@ fn main() {
                 break;
             }
         }
+        wasm_peer.send_text("Hello from WASM!".to_string()).unwrap();
     });
 }
