@@ -19,6 +19,7 @@ pub enum RoleAction {
 pub struct Peer {
     pub rtc: Rtc,
     pub socket: UdpSocket,
+    // this should actually be the addr that is publicly available (the advertised addr).
     pub local_addr: SocketAddr,
     pending_offer: Option<SdpPendingOffer>,
 }
@@ -31,16 +32,14 @@ impl Peer {
         let local_addr = socket.local_addr()?;
 
         let rtc = RtcConfig::new().build(Instant::now());
-
+        let advertised_addr = SocketAddr::new(advertise_ip, local_addr.port());
+        let candidate = Candidate::host(advertised_addr, "udp")?;
         let mut peer = Self {
             rtc,
             socket,
-            local_addr,
+            local_addr: advertised_addr,
             pending_offer: None,
         };
-
-        let advertised_addr = SocketAddr::new(advertise_ip, local_addr.port());
-        let candidate = Candidate::host(advertised_addr, "udp")?;
         peer.rtc.add_local_candidate(candidate);
 
         Ok(peer)
