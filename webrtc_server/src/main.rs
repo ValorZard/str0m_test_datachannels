@@ -33,11 +33,8 @@ async fn run_server(args: &Args) -> Result<()> {
         .ok_or_else(|| anyhow!("--advertise-ip is required in server mode"))?;
 
     let mut peer = Peer::new(args.bind_ip, advertise_ip, args.udp_port).await?;
-    println!("server: UDP bound on {}", peer.local_addr);
-    println!(
-        "server: advertising ICE candidate {}:{}",
-        advertise_ip, args.udp_port
-    );
+    println!("server: UDP bound on {}", peer.bound_addr);
+    println!("server: advertising ICE candidate {}", peer.advertised_addr);
 
     let listener = TcpListener::bind((args.bind_ip, args.signal_port)).await?;
     println!("server: signaling on {}:{}", args.bind_ip, args.signal_port);

@@ -19,28 +19,33 @@ pub enum RoleAction {
 pub struct Peer {
     pub rtc: Rtc,
     pub socket: UdpSocket,
-    // this should actually be the addr that is publicly available (the advertised addr).
-    pub local_addr: SocketAddr,
+    pub bound_addr: SocketAddr,      // wildcard or actual socket bind
+    pub advertised_addr: SocketAddr, // ICE candidate address exposed to peer
     pending_offer: Option<SdpPendingOffer>,
 }
 
 impl Peer {
     pub async fn new(bind_ip: IpAddr, advertise_ip: IpAddr, udp_port: u16) -> Result<Self> {
         str0m::crypto::from_feature_flags().install_process_default();
+
         let std_socket = std::net::UdpSocket::bind(SocketAddr::new(bind_ip, udp_port))?;
         std_socket.set_nonblocking(true)?;
         let socket = UdpSocket::from_std(std_socket)?;
-        let local_addr = socket.local_addr()?;
+
+        let bound_addr = socket.local_addr()?;
+        let advertised_addr = SocketAddr::new(advertise_ip, bound_addr.port());
 
         let rtc = RtcConfig::new().build(Instant::now());
-        let advertised_addr = SocketAddr::new(advertise_ip, local_addr.port());
         let candidate = Candidate::host(advertised_addr, "udp")?;
+
         let mut peer = Self {
             rtc,
             socket,
-            local_addr: advertised_addr,
+            bound_addr,
+            advertised_addr,
             pending_offer: None,
         };
+
         peer.rtc.add_local_candidate(candidate);
 
         Ok(peer)
@@ -170,7 +175,8 @@ impl Peer {
                             let receive = Receive::new(
                                 Protocol::Udp,
                                 source,
-                                self.local_addr,
+                                 // this should actually be the addr that is publicly available (the advertised addr).
+                                self.advertised_addr,
                                 &buf[..n],
                             )?;
                             self.rtc.handle_input(Input::Receive(Instant::now(), receive))?;

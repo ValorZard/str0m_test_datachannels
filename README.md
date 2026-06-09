@@ -5,8 +5,6 @@ native str0m client can bypass using STUN/TURN by just sending its own IP addres
 
 WASM Client has to use STUN/TURN/ICE trickling. 
 
-(Note: for some reason, this doesn't work on firefox for now.)
-
 # How to build for Linux
 ``cross build --target x86_64-unknown-linux-gnu # can do release version by adding --release``
 
@@ -17,6 +15,16 @@ WASM Client has to use STUN/TURN/ICE trickling.
 ```bash
 cargo run -p server -- --advertise-ip 127.0.0.1
 ```
+
+Note: if you are connecting to the server from firefox WASM on the same computer, make sure you advertise an IP that's not localhost.
+
+for example:
+```bash
+cargo run -p webrtc_server  -- --bind-ip 0.0.0.0 --advertise-ip 10.0.1.130 --signal-port 7000 --udp-port 5000
+```
+
+This is because firefox doesn't like it when you connect to WebRTC using a loopback address.
+
 ### Native Client:
 
 ```bash
