@@ -10,8 +10,9 @@ use wasm_bindgen::closure::Closure;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::{JsFuture, spawn_local};
 use web_sys::{
-    Event, MessageEvent, RtcConfiguration, RtcDataChannel, RtcDataChannelEvent, RtcIceCandidate,
-    RtcIceCandidateInit, RtcIceServer, RtcPeerConnection, RtcPeerConnectionIceEvent, RtcSdpType,
+    Element, Event, HtmlButtonElement, HtmlElement, HtmlInputElement, MessageEvent,
+    RtcConfiguration, RtcDataChannel, RtcDataChannelEvent, RtcIceCandidate, RtcIceCandidateInit,
+    RtcIceServer, RtcPeerConnection, RtcPeerConnectionIceEvent, RtcSdpType,
     RtcSessionDescriptionInit,
 };
 use ws_stream_wasm::{WsMessage, WsMeta};
@@ -308,16 +309,14 @@ async fn wait_for_ice_gathering_complete(pc: &RtcPeerConnection) {
 // TODO: Make this not hardcoded at some point
 const SERVER_ADDRESS: &str = "ws://127.0.0.1:7000";
 
-fn main() {
-    console_error_panic_hook::set_once();
-
-    spawn_local(async {
+fn connect_to_server(server_address: String) {
+    spawn_local(async move {
         let wasm_peer = WasmPeer::new().expect("should work");
 
-        let (ws, wsio) = match WsMeta::connect(SERVER_ADDRESS, None).await {
+        let (ws, wsio) = match WsMeta::connect(server_address.clone(), None).await {
             Ok(parts) => parts,
             Err(e) => {
-                log!("WebSocket connect failed for {}: {:?}", SERVER_ADDRESS, e);
+                log!("WebSocket connect failed for {}: {:?}", server_address, e);
                 return;
             }
         };
@@ -351,4 +350,34 @@ fn main() {
             TimeoutFuture::new(50).await;
         }
     });
+}
+
+fn main() {
+    console_error_panic_hook::set_once();
+
+    let window = web_sys::window().expect("no global `window` exists");
+    let document = window.document().expect("should have a document on window");
+    let body = document.body().expect("document should have a body");
+
+    let server_searchbox = document
+        .get_element_by_id("server-searchbox")
+        .expect("should be here");
+
+    // set default address here
+    {
+        let server_searchbox: &HtmlInputElement = server_searchbox.dyn_ref().unwrap();
+        server_searchbox.set_value(SERVER_ADDRESS);
+    }
+
+    let a = Closure::<dyn FnMut()>::new(move || {
+        let server_searchbox: &HtmlInputElement = server_searchbox.dyn_ref().unwrap();
+        connect_to_server(server_searchbox.value());
+    });
+    document
+        .get_element_by_id("server-button")
+        .expect("should be here")
+        .dyn_ref::<HtmlElement>()
+        .unwrap()
+        .set_onclick(Some(a.as_ref().unchecked_ref()));
+    a.forget();
 }

@@ -38,4 +38,6 @@ features = [
   "RtcSdpType",
   "RtcSessionDescriptionInit",
   "RtcSessionDescription",
+    "Document", "Element", "HtmlElement", "Node", "Window",
+    "HtmlInputElement","HtmlButtonElement"
 ]
