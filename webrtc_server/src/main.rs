@@ -1,12 +1,16 @@
 use anyhow::{Result, anyhow, bail};
 use clap::{Parser, ValueEnum};
+use native_shared::{
+    SignalMessage,
+    peer::{Peer, RoleAction},
+    read_msg, write_msg,
+};
 use serde_json::Deserializer;
 use std::{
     io::{BufReader, Write},
     net::{IpAddr, TcpListener, TcpStream},
 };
 use tokio::sync::oneshot;
-use native_shared::{peer::{Peer, RoleAction}, read_msg, write_msg, SignalMessage};
 
 #[derive(Debug, Parser)]
 struct Args {

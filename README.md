@@ -6,12 +6,12 @@
 
 ### Server:
 ```bash
-cargo run -- --mode server --advertise-ip 127.0.0.1
+cargo run -p server -- --advertise-ip 127.0.0.1
 ```
 ### Client:
 
 ```bash
-cargo run -- --mode client --advertise-ip 127.0.0.1 --server-ip 127.0.0.1
+cargo run -p client -- --advertise-ip 127.0.0.1 --server-ip 127.0.0.1
 ```
 
 ## Real remote server
@@ -19,10 +19,10 @@ cargo run -- --mode client --advertise-ip 127.0.0.1 --server-ip 127.0.0.1
 On the server machine:
 
 ```bash
-cargo run -- --mode server --advertise-ip YOUR_PUBLIC_SERVER_IP
+cargo run -p server -- --advertise-ip YOUR_PUBLIC_SERVER_IP
 ```
 On the client machine:
 
 ```bash
-cargo run -- --mode client --server-ip YOUR_PUBLIC_SERVER_IP --advertise-ip YOUR_CLIENT_PUBLIC_IP
+cargo run -p client -- --server-ip YOUR_PUBLIC_SERVER_IP --advertise-ip YOUR_CLIENT_PUBLIC_IP
 ```
