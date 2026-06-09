@@ -1,3 +1,6 @@
+# How to build for Linux
+``cross build --target x86_64-unknown-linux-gnu # can do release version by adding --release``
+
 # How to run
 ## Localhost test
 
