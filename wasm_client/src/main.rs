@@ -33,6 +33,7 @@ pub struct IceCandidateMessage {
 struct Inner {
     pc: RtcPeerConnection,
     data_channel: RefCell<Option<RtcDataChannel>>,
+    data_channel_open: RefCell<bool>,
     pending_local_ice: RefCell<Vec<IceCandidateMessage>>,
     received_messages: RefCell<Vec<Vec<u8>>>,
 
@@ -57,6 +58,7 @@ impl WasmPeer {
         let inner = Rc::new(Inner {
             pc,
             data_channel: RefCell::new(None),
+            data_channel_open: RefCell::new(false),
             pending_local_ice: RefCell::new(Vec::new()),
             received_messages: RefCell::new(Vec::new()),
             on_ice_candidate: RefCell::new(None),
@@ -151,27 +153,33 @@ impl WasmPeer {
     }
 
     pub fn send_text(&self, text: String) -> Result<(), JsValue> {
-        let dc = self
-            .inner
-            .data_channel
-            .borrow()
-            .as_ref()
-            .cloned()
-            .ok_or_else(|| JsValue::from_str("data channel not available"))?;
+        if *self.inner.data_channel_open.borrow() {
+            let dc = self
+                .inner
+                .data_channel
+                .borrow()
+                .as_ref()
+                .cloned()
+                .ok_or_else(|| JsValue::from_str("data channel not available"))?;
 
-        dc.send_with_str(&text)
+            return dc.send_with_str(&text);
+        }
+        Err(JsValue::from_str("Data channel hasn't initialized yet!"))
     }
 
     pub fn send_bytes(&self, bytes: Vec<u8>) -> Result<(), JsValue> {
-        let dc = self
-            .inner
-            .data_channel
-            .borrow()
-            .as_ref()
-            .cloned()
-            .ok_or_else(|| JsValue::from_str("data channel not available"))?;
+        if *self.inner.data_channel_open.borrow() {
+            let dc = self
+                .inner
+                .data_channel
+                .borrow()
+                .as_ref()
+                .cloned()
+                .ok_or_else(|| JsValue::from_str("data channel not available"))?;
 
-        dc.send_with_u8_array(&bytes)
+            return dc.send_with_u8_array(&bytes);
+        }
+        Err(JsValue::from_str("Data channel hasn't initialized yet!"))
     }
 
     pub fn take_received_messages(&self) -> Result<String, JsValue> {
@@ -253,7 +261,9 @@ fn install_peer_handlers(inner: &Rc<Inner>) -> Result<(), JsValue> {
 }
 
 fn install_data_channel_handlers(inner: &Rc<Inner>, dc: &RtcDataChannel) -> Result<(), JsValue> {
+    let inner_for_open = Rc::clone(inner);
     let on_open = Closure::wrap(Box::new(move |_e: Event| {
+        *inner_for_open.data_channel_open.borrow_mut() = true;
         web_sys::console::log_1(&"data channel open".into());
     }) as Box<dyn FnMut(_)>);
     dc.set_onopen(Some(on_open.as_ref().unchecked_ref()));
@@ -332,6 +342,13 @@ fn main() {
                 break;
             }
         }
-        wasm_peer.send_text("Hello from WASM!".to_string()).unwrap();
+        // send until its open
+        loop {
+            if let Ok(_) = wasm_peer.send_text("Hello from WASM!".to_string()) {
+                log!("Success");
+                break;
+            }
+            TimeoutFuture::new(50).await;
+        }
     });
 }
