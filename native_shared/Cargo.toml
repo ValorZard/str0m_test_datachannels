@@ -8,9 +8,4 @@ anyhow = {workspace = true}
 serde = {workspace = true}
 serde_json = {workspace = true}
 tokio = {workspace = true}
-
-[target.'cfg(not(target_os = "linux"))'.dependencies]
 str0m = "0.20"
-
-[target.'cfg(target_os = "linux")'.dependencies]
-str0m = { version = "0.20", default-features = false, features = ["openssl-dimpl"] }
