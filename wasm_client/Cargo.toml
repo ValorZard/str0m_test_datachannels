@@ -1,0 +1,41 @@
+[package]
+name = "wasm_client"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+signaling_shared = {path = "../signaling_shared/"}
+anyhow = {workspace = true}
+console_error_panic_hook = "0.1"
+js-sys = "0.3"
+serde = {workspace = true}
+serde_json = {workspace = true}
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+ws_stream_wasm = "0.7.5"
+futures-util = {workspace = true}
+gloo-timers = { version = "0.4", features = ["futures"] }
+
+[dependencies.web-sys]
+version = "0.3"
+features = [
+  "console",
+  "BinaryType",
+  "Blob",
+  "Event",
+  "MessageEvent",
+  "RtcConfiguration",
+  "RtcDataChannel",
+  "RtcDataChannelEvent",
+  "RtcDataChannelInit",
+  "RtcIceCandidate",
+  "RtcIceCandidateInit",
+  "RtcIceConnectionState",
+  "RtcIceGatheringState",
+  "RtcIceServer",
+  "RtcPeerConnection",
+  "RtcPeerConnectionIceEvent",
+  "RtcSdpType",
+  "RtcSessionDescriptionInit",
+  "RtcSessionDescription",
+]

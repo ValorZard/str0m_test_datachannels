@@ -2,12 +2,13 @@ use std::net::IpAddr;
 
 use anyhow::{Result, anyhow, bail};
 use clap::{Parser, ValueEnum};
+use futures_util::StreamExt;
 use native_shared::{
-    SignalMessage,
     peer::{Peer, RoleAction},
     read_msg, write_msg,
 };
 use serde_json::Deserializer;
+use signaling_shared::SignalMessage;
 
 use tokio::{net::TcpListener, sync::oneshot, task::JoinSet};
 
@@ -41,10 +42,17 @@ async fn run_server(args: &Args) -> Result<()> {
     let listener = TcpListener::bind((args.bind_ip, args.signal_port)).await?;
     println!("server: signaling on {}:{}", args.bind_ip, args.signal_port);
 
-    while let Ok((mut stream, addr)) = listener.accept().await {
+    while let Ok((mut raw_stream, addr)) = listener.accept().await {
+        let ws_stream = match tokio_tungstenite::accept_async(raw_stream).await {
+            Ok(ws) => ws,
+            Err(err) => {
+                eprintln!("WebSocket handshake failed for {}: {:?}", addr, err);
+                return Ok(());
+            }
+        };
         println!("server: signaling connected from {addr}");
 
-        let (mut read_stream, mut write_stream) = stream.split();
+        let (mut write_stream, mut read_stream) = ws_stream.split();
 
         let offer = read_msg(&mut read_stream).await?;
         let answer_sdp = match offer {
@@ -52,7 +60,11 @@ async fn run_server(args: &Args) -> Result<()> {
             _ => bail!("expected offer"),
         };
 
-        write_msg(&mut write_stream, &SignalMessage::Answer { sdp: answer_sdp }).await?;
+        write_msg(
+            &mut write_stream,
+            &SignalMessage::Answer { sdp: answer_sdp },
+        )
+        .await?;
 
         let (tx, _rx) = oneshot::channel::<Vec<u8>>();
         peer.run("server", RoleAction::EchoServer, tx).await?

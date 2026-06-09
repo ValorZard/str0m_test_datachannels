@@ -1,15 +1,15 @@
 use anyhow::{Result, anyhow, bail};
 use clap::{Parser, ValueEnum};
+use futures_util::StreamExt;
 use native_shared::{
-    SignalMessage,
     peer::{Peer, RoleAction},
     read_msg, write_msg,
 };
 use serde_json::Deserializer;
-use std::{
-    net::{IpAddr},
-};
+use signaling_shared::SignalMessage;
+use std::net::{IpAddr, SocketAddr};
 use tokio::{net::TcpStream, sync::oneshot};
+use tokio_tungstenite::connect_async;
 
 #[derive(Debug, Parser)]
 struct Args {
@@ -46,14 +46,17 @@ async fn run_client(args: &Args) -> Result<()> {
         advertise_ip, args.udp_port
     );
 
-    let mut stream = TcpStream::connect((server_ip, args.signal_port)).await?;
+    let server_addr = format!("ws://{server_ip}:{}", args.signal_port);
+    println!("connecting to signaling server {server_addr}");
+    let (stream, response) = connect_async(server_addr).await?;
     println!(
         "client: signaling connected to {}:{}",
         server_ip, args.signal_port
     );
+    println!("client: initial response from server {response:?}");
 
     let offer_sdp = peer.create_offer("chat")?;
-    let (mut read_half, mut write_half) = stream.split();
+    let (mut write_half, mut read_half) = stream.split();
     write_msg(&mut write_half, &SignalMessage::Offer { sdp: offer_sdp }).await?;
 
     let answer = read_msg(&mut read_half).await?;
