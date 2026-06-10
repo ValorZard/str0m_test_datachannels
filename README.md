@@ -1,12 +1,11 @@
 # str0m datachannel test
-Connect to a str0m webrtc peer through either a native client (using str0m itself) or a WASM client.
+Connect to a [str0m](https://github.com/algesten/str0m) webrtc peer through either a native client (using str0m itself) or a WASM client using a websocket signaling server.
 
-native str0m client can bypass using STUN/TURN by just sending its own IP address directly.
+Native str0m clients can bypass using STUN/TURN by just sending its own IP address directly.
 
-WASM Client has to use STUN/TURN/ICE trickling. 
+The reason is that the entire point of STUN/TURN is for clients to discover their own public IP address and port number. But, that's only needed in the browser for security reasons. If we are launching from our own machine we can just ... look up our own IP ourselves.
 
-# How to build for Linux
-``cross build --target x86_64-unknown-linux-gnu # can do release version by adding --release``
+The WASM Client is stuck having to use STUN/TURN/ICE trickling, though, and it's a little annoying if you want Trickle ICE. Just waiting for all ICE candidates to show up before connecting works, but adds extra startup time.
 
 # How to run
 ## Localhost test
@@ -38,7 +37,9 @@ cargo run -p client -- --advertise-ip 127.0.0.1 --server-addr "ws://127.0.0.1:70
 ```
 
 ### WASM Client:
+You will need to have installed [trunk](https://github.com/trunk-rs/trunk).
 
+Then, you can just do:
 ```bash
 cd wasm_client
 trunk serve
@@ -57,3 +58,9 @@ On the client machine:
 ```bash
 cargo run -p client -- --server-addr YOUR_PUBLIC_SERVER_ADDR --advertise-ip YOUR_CLIENT_PUBLIC_IP
 ```
+
+# How to build for Linux
+You will need to have installed [cross](https://github.com/cross-rs/cross).
+
+Then you can just do:
+``cross build --target x86_64-unknown-linux-gnu # can do release version by adding --release``
