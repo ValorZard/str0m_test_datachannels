@@ -404,6 +404,14 @@ fn connect_to_server(server_address: String) {
             }
             TimeoutFuture::new(50).await;
         }
+
+        // read messages coming in
+        loop {
+            if let Ok(message) = wasm_peer.take_received_messages() {
+                log!("Message from data channel: {message}");
+            }
+            TimeoutFuture::new(50).await;
+        }
     });
 }
 fn main() {
