@@ -89,6 +89,16 @@ impl WasmPeer {
             .await
             .ok()?;
 
+        // since we are connected to a public IP, we don't need to actually send ICE candidates,
+        // but we do it to make firefox happy
+        loop {
+            log!("{:?}", self.inner.pc.ice_gathering_state());
+            if self.inner.pc.ice_gathering_state() == web_sys::RtcIceGatheringState::Complete {
+                break;
+            }
+            TimeoutFuture::new(50).await;
+        }
+
         let local = self.inner.pc.local_description()?;
         log!("local description after gathering: {:?}", local.sdp());
         Some(local.sdp())
@@ -316,85 +326,25 @@ fn connect_to_server(server_address: String) {
             }
         };
 
-        let (send_stream, mut recv_stream) = wsio.split();
-        let send_stream = Rc::new(RefCell::new(send_stream));
+        let (mut send_stream, mut recv_stream) = wsio.split();
+        let offer_sdp = wasm_peer.create_offer().await.unwrap();
+        let signaling_message = SignalMessage::Offer { sdp: offer_sdp };
+        let signaling_message = serde_json::to_string(&signaling_message).unwrap();
+        let send_message = WsMessage::Text(signaling_message);
+        let _ = send_stream.send(send_message).await;
 
-        let offer_sdp = match wasm_peer.create_offer().await {
-            Some(sdp) => sdp,
-            None => {
-                log!("failed to create offer");
-                return;
-            }
-        };
-
-        {
-            let msg = SignalMessage::Offer { sdp: offer_sdp };
-            let text = serde_json::to_string(&msg).unwrap();
-            if let Err(e) = send_stream.borrow_mut().send(WsMessage::Text(text)).await {
-                log!("failed to send offer: {:?}", e);
-                return;
-            }
-        }
-
-        let peer = wasm_peer.clone();
-        spawn_local(async move {
-            while let Some(msg) = recv_stream.next().await {
-                match msg {
-                    WsMessage::Text(text) => {
-                        let parsed = match serde_json::from_str::<SignalMessage>(&text) {
-                            Ok(v) => v,
-                            Err(e) => {
-                                log!("failed to parse signaling message: {:?}", e);
-                                continue;
-                            }
-                        };
-
-                        match parsed {
-                            SignalMessage::Answer { sdp } => {
-                                log!("received answer sdp");
-                                if let Err(e) = peer.accept_answer(sdp).await {
-                                    log!("failed to accept answer: {:?}", e);
-                                    return;
-                                }
-                            }
-                            SignalMessage::IceCandidate { candidate } => {
-                                if let Err(e) = peer.add_ice_candidate(candidate).await {
-                                    log!("failed to add remote ICE candidate: {:?}", e);
-                                }
-                            }
-                            SignalMessage::Offer { .. } => {
-                                log!("unexpected offer");
-                            }
-                        }
-                    }
-                    other => {
-                        log!("unexpected websocket message: {:?}", other);
-                    }
-                }
-            }
-        });
-
-        // Send local ICE candidates as they are gathered.
+        // now wait for message to send back answer
         loop {
-            if wasm_peer.ice_gathering_state() == RtcIceGatheringState::Complete {
-                log!("Ice gathering is finished");
+            if let Some(WsMessage::Text(answer_string)) = recv_stream.next().await {
+                let parsed_answer = serde_json::from_str::<SignalMessage>(&answer_string).unwrap();
+                let answer_sdp = parsed_answer.sdp().unwrap();
+                log!("received answer sdp: {:?}", answer_sdp);
+                wasm_peer
+                    .accept_answer(answer_sdp.clone())
+                    .await
+                    .unwrap();
                 break;
             }
-
-            let candidates = drain_local_ice_candidates(wasm_peer.clone());
-
-            for ice in candidates {
-                let msg = SignalMessage::IceCandidate {
-                    candidate: ice.candidate,
-                };
-                let text = serde_json::to_string(&msg).unwrap();
-                if let Err(e) = send_stream.borrow_mut().send(WsMessage::Text(text)).await {
-                    log!("failed to send ICE candidate: {:?}", e);
-                    return;
-                }
-            }
-
-            TimeoutFuture::new(25).await;
         }
 
         // send until its open
