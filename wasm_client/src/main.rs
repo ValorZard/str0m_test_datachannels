@@ -1,7 +1,7 @@
 use anyhow::{Result, anyhow};
 use futures_util::{SinkExt, StreamExt};
 use gloo_timers::future::TimeoutFuture;
-use js_sys::{Array, Uint8Array};
+use js_sys::{Array, Reflect, Uint8Array};
 use serde::{Deserialize, Serialize};
 use signaling_shared::SignalMessage;
 use std::{cell::RefCell, rc::Rc};
@@ -39,6 +39,7 @@ struct Inner {
     received_messages: RefCell<Vec<Vec<u8>>>,
 
     on_ice_candidate: RefCell<Option<Closure<dyn FnMut(RtcPeerConnectionIceEvent)>>>,
+    on_ice_connection_state_change: RefCell<Option<Closure<dyn FnMut(Event)>>>,
     on_data_channel: RefCell<Option<Closure<dyn FnMut(RtcDataChannelEvent)>>>,
     on_open: RefCell<Option<Closure<dyn FnMut(Event)>>>,
     on_message: RefCell<Option<Closure<dyn FnMut(MessageEvent)>>>,
@@ -63,6 +64,7 @@ impl WasmPeer {
             pending_local_ice: RefCell::new(Vec::new()),
             received_messages: RefCell::new(Vec::new()),
             on_ice_candidate: RefCell::new(None),
+            on_ice_connection_state_change: RefCell::new(None),
             on_data_channel: RefCell::new(None),
             on_open: RefCell::new(None),
             on_message: RefCell::new(None),
@@ -207,7 +209,7 @@ fn install_peer_handlers(inner: &Rc<Inner>) -> Result<(), JsValue> {
                 return;
             }
 
-            log!("{:?}", candidate);
+            log!("local candidate: {:?}", candidate_str);
             // since we are just doing datachannels, we don't care about media, so no need for mid or mline
             inner_for_ice
                 .pending_local_ice
@@ -223,6 +225,18 @@ fn install_peer_handlers(inner: &Rc<Inner>) -> Result<(), JsValue> {
         .pc
         .set_onicecandidate(Some(on_ice.as_ref().unchecked_ref()));
     inner.on_ice_candidate.replace(Some(on_ice));
+
+    let inner_for_state = Rc::clone(inner);
+    let on_ice_state_change = Closure::wrap(Box::new(move |_e: Event| {
+        let state = inner_for_state.pc.ice_connection_state();
+        log!("ICE connection state: {:?}", state);
+    }) as Box<dyn FnMut(_)>);
+    inner
+        .pc
+        .set_oniceconnectionstatechange(Some(on_ice_state_change.as_ref().unchecked_ref()));
+    inner
+        .on_ice_connection_state_change
+        .replace(Some(on_ice_state_change));
 
     let inner_for_dc = Rc::clone(inner);
     let on_data_channel = Closure::wrap(Box::new(move |e: RtcDataChannelEvent| {
@@ -361,10 +375,9 @@ fn connect_to_server(server_address: String) {
 
         // Send local ICE candidates as they are gathered.
         loop {
-            if wasm_peer.ice_connection_state() == RtcIceConnectionState::Completed
-                || wasm_peer.ice_gathering_state() == RtcIceGatheringState::Complete
+            if wasm_peer.ice_gathering_state() == RtcIceGatheringState::Complete
             {
-                log!("Ice is finished");
+                log!("Ice gathering is finished");
                 break;
             }
 
