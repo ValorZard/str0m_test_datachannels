@@ -57,15 +57,14 @@ impl Peer {
         Some(converted_candidate)
     }
 
-    pub async fn new(advertise_ip: IpAddr, udp_port: u16) -> Result<Self> {
+    pub async fn new(advertised_addr: SocketAddr) -> Result<Self> {
         let bind_ip = IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0));
 
-        let std_socket = std::net::UdpSocket::bind(SocketAddr::new(bind_ip, udp_port))?;
+        let std_socket = std::net::UdpSocket::bind(SocketAddr::new(bind_ip, advertised_addr.port()))?;
         std_socket.set_nonblocking(true)?;
         let socket = UdpSocket::from_std(std_socket)?;
 
         let bound_addr = socket.local_addr()?;
-        let advertised_addr = SocketAddr::new(advertise_ip, bound_addr.port());
 
         let rtc = RtcConfig::new().build(Instant::now());
         let candidate = Candidate::host(advertised_addr, "udp")?;
@@ -136,7 +135,7 @@ impl Peer {
         &mut self,
         peer_name: &str,
         action: RoleAction,
-        mut remote_ice_rx: Option<mpsc::UnboundedReceiver<String>>,
+        mut remote_ice_receiver: Option<mpsc::UnboundedReceiver<String>>,
         done_tx: oneshot::Sender<Vec<u8>>,
     ) -> Result<()> {
         let mut buf = vec![0u8; 65535];
@@ -147,14 +146,22 @@ impl Peer {
 
         loop {
             // Apply any trickled remote ICE candidates before polling RTC output.
-            if let Some(rx) = remote_ice_rx.as_mut() {
+            if let Some(rx) = remote_ice_receiver.as_mut() {
                 loop {
                     match rx.try_recv() {
                         Ok(candidate) => {
                             self.add_remote_ice_candidate(candidate)?;
                         }
-                        Err(mpsc::error::TryRecvError::Empty)
-                        | Err(mpsc::error::TryRecvError::Disconnected) => {
+                        Err(mpsc::error::TryRecvError::Empty) => {
+                            break;
+                        }
+                        Err(mpsc::error::TryRecvError::Disconnected) => {
+                            if matches!(&action, RoleAction::EchoServer) {
+                                println!(
+                                    "{peer_name}: signaling disconnected; ending echo session"
+                                );
+                                return Ok(());
+                            }
                             break;
                         }
                     }
@@ -170,6 +177,21 @@ impl Peer {
                     Output::Event(event) => match event {
                         Event::Connected => {
                             println!("{peer_name}: connected");
+                        }
+                        Event::IceConnectionStateChange(state) => {
+                            println!("{peer_name}: event: IceConnectionStateChange({state:?})");
+
+                            if matches!(&action, RoleAction::EchoServer)
+                                && matches!(
+                                    format!("{state:?}").as_str(),
+                                    "Disconnected" | "Failed" | "Closed"
+                                )
+                            {
+                                println!(
+                                    "{peer_name}: ending session after terminal ICE state {state:?}"
+                                );
+                                return Ok(());
+                            }
                         }
                         Event::ChannelOpen(cid, label) => {
                             println!("{peer_name}: channel open: {label:?}");
