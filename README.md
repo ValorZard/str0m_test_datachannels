@@ -59,8 +59,7 @@ On the client machine:
 cargo run -p client -- --server-addr YOUR_PUBLIC_SERVER_ADDR
 ```
 
-Note that the client peer doesn't need to advertise it's own IP address. This is because because the server is already advertising it's public IP, we don't actually need to put in the work to find our own IP.
-So, as long as we put in a somewhat valid IP address, the server peer will be able to connect to the client peer. I put "192:168:0:0" as the hardcoded client advertising IP because why not.
+Note that the client peer doesn't need to advertise it's own IP address. This is because because the server is already advertising it's public IP, we don't actually need to put in the work to find our own IP. So, as long as we put in a somewhat valid IP address, the server peer will be able to connect to the client peer.
 
 # How to build for Linux
 You will need to have installed [cross](https://github.com/cross-rs/cross).
