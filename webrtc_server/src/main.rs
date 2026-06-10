@@ -4,8 +4,7 @@ use anyhow::{Result, bail};
 use clap::Parser;
 use futures_util::StreamExt;
 use native_shared::{
-    peer::{Peer, RoleAction},
-    read_msg, write_msg,
+    install_str0m_process, peer::{Peer, RoleAction}, read_msg, write_msg
 };
 use signaling_shared::SignalMessage;
 
@@ -58,6 +57,8 @@ struct Args {
 }
 
 async fn run_server(args: &Args) -> Result<()> {
+    // HAS TO BE RUN BEFORE WEBRTC STUFF RUNS
+    install_str0m_process();
     let listener = TcpListener::bind((args.bind_ip, args.signal_port)).await?;
     println!("server: signaling on {}:{}", args.bind_ip, args.signal_port);
     // this is only really necessary if you are testing server and client on same machine
@@ -75,7 +76,7 @@ async fn run_server(args: &Args) -> Result<()> {
             );
         }
 
-        let mut peer = Peer::new(args.bind_ip, advertise_ip, args.udp_port).await?;
+        let mut peer = Peer::new(advertise_ip, args.udp_port).await?;
         println!("server: UDP bound on {}", peer.bound_addr);
         println!("server: advertising ICE candidate {}", peer.advertised_addr);
 

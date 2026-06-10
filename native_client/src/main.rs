@@ -2,23 +2,16 @@ use anyhow::{Result, anyhow, bail};
 use clap::{Parser, ValueEnum};
 use futures_util::StreamExt;
 use native_shared::{
-    peer::{Peer, RoleAction},
-    read_msg, write_msg,
+    install_str0m_process, peer::{Peer, RoleAction}, read_msg, write_msg
 };
 use serde_json::Deserializer;
 use signaling_shared::SignalMessage;
-use std::net::{IpAddr, SocketAddr};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use tokio::{net::TcpStream, sync::oneshot};
 use tokio_tungstenite::connect_async;
 
 #[derive(Debug, Parser)]
 struct Args {
-    #[arg(long, default_value = "0.0.0.0")]
-    bind_ip: IpAddr,
-
-    #[arg(long)]
-    advertise_ip: Option<IpAddr>,
-
     #[arg(long)]
     server_addr: String,
 
@@ -30,12 +23,16 @@ struct Args {
 }
 
 async fn run_client(args: &Args) -> Result<()> {
+    // HAS TO BE RUN BEFORE WEBRTC STUFF RUNS
+    install_str0m_process();
     let server_addr = &args
         .server_addr;
 
-    let advertise_ip = args.advertise_ip.unwrap_or(args.bind_ip);
+    // because the server is already advertising it's public IP, we don't actually need to put in the work to find our own IP
+    // so we can put whatever we want here since the "server" peer will be able to directly connect anyways.
+    let advertise_ip = IpAddr::V4(Ipv4Addr::new(192,168,0,0));
 
-    let mut peer = Peer::new(args.bind_ip, advertise_ip, args.udp_port).await?;
+    let mut peer = Peer::new(advertise_ip, args.udp_port).await?;
     println!("client: UDP bound on {}", peer.bound_addr);
     println!(
         "client: advertising ICE candidate {}:{}",

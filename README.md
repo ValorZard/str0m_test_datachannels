@@ -33,7 +33,7 @@ This is because firefox doesn't like it when you connect to WebRTC using a loopb
 ### Native Client:
 
 ```bash
-cargo run -p client -- --advertise-ip 127.0.0.1 --server-addr "ws://127.0.0.1:7000"
+cargo run -p client -- --server-addr "ws://127.0.0.1:7000"
 ```
 
 ### WASM Client:
@@ -56,8 +56,11 @@ cargo run -p server -- --advertise-ip YOUR_PUBLIC_SERVER_IP
 On the client machine:
 
 ```bash
-cargo run -p client -- --server-addr YOUR_PUBLIC_SERVER_ADDR --advertise-ip YOUR_CLIENT_PUBLIC_IP
+cargo run -p client -- --server-addr YOUR_PUBLIC_SERVER_ADDR
 ```
+
+Note that the client peer doesn't need to advertise it's own IP address. This is because because the server is already advertising it's public IP, we don't actually need to put in the work to find our own IP.
+So, as long as we put in a somewhat valid IP address, the server peer will be able to connect to the client peer. I put "192:168:0:0" as the hardcoded client advertising IP because why not.
 
 # How to build for Linux
 You will need to have installed [cross](https://github.com/cross-rs/cross).

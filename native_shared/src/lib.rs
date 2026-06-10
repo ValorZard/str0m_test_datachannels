@@ -8,6 +8,11 @@ use tokio::io::{AsyncRead, AsyncWrite};
 use tokio_tungstenite::{WebSocketStream, tungstenite};
 pub mod peer;
 
+// IMPORTANT! THIS HAS TO BE CALLED BEFORE ALL STR0M WEBRTC STUFF
+pub fn install_str0m_process() {
+    str0m::crypto::from_feature_flags().install_process_default();
+}
+
 pub async fn write_msg<S>(
     sink: &mut SplitSink<WebSocketStream<S>, tungstenite::Message>,
     msg: &SignalMessage,

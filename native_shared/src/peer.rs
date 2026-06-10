@@ -1,6 +1,6 @@
 use anyhow::{Result, anyhow};
 use std::{
-    net::{IpAddr, SocketAddr, ToSocketAddrs},
+    net::{IpAddr, Ipv4Addr, SocketAddr, ToSocketAddrs},
     time::Instant,
 };
 use str0m::{
@@ -57,8 +57,8 @@ impl Peer {
         Some(converted_candidate)
     }
 
-    pub async fn new(bind_ip: IpAddr, advertise_ip: IpAddr, udp_port: u16) -> Result<Self> {
-        str0m::crypto::from_feature_flags().install_process_default();
+    pub async fn new(advertise_ip: IpAddr, udp_port: u16) -> Result<Self> {
+        let bind_ip = IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0));
 
         let std_socket = std::net::UdpSocket::bind(SocketAddr::new(bind_ip, udp_port))?;
         std_socket.set_nonblocking(true)?;
