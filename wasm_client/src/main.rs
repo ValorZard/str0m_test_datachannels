@@ -16,6 +16,7 @@ use web_sys::{
     RtcPeerConnectionIceEvent, RtcSdpType, RtcSessionDescriptionInit,
 };
 use ws_stream_wasm::{WsMessage, WsMeta};
+use std::cell::OnceCell;
 
 #[macro_export]
 macro_rules! log {
@@ -34,15 +35,15 @@ pub struct IceCandidateMessage {
 struct Inner {
     pc: RtcPeerConnection,
     data_channel: RefCell<Option<RtcDataChannel>>,
-    data_channel_open: RefCell<bool>,
+    is_data_channel_open: RefCell<bool>,
     pending_local_ice: RefCell<Vec<IceCandidateMessage>>,
     received_messages: RefCell<Vec<Vec<u8>>>,
 
-    on_ice_candidate: RefCell<Option<Closure<dyn FnMut(RtcPeerConnectionIceEvent)>>>,
-    on_ice_connection_state_change: RefCell<Option<Closure<dyn FnMut(Event)>>>,
-    on_data_channel: RefCell<Option<Closure<dyn FnMut(RtcDataChannelEvent)>>>,
-    on_open: RefCell<Option<Closure<dyn FnMut(Event)>>>,
-    on_message: RefCell<Option<Closure<dyn FnMut(MessageEvent)>>>,
+    on_ice_candidate: OnceCell<Closure<dyn FnMut(RtcPeerConnectionIceEvent)>>,
+    on_ice_connection_state_change: OnceCell<Closure<dyn FnMut(Event)>>,
+    on_data_channel: OnceCell<Closure<dyn FnMut(RtcDataChannelEvent)>>,
+    on_data_channel_open: RefCell<Option<Closure<dyn FnMut(Event)>>>,
+    on_data_channel_message: RefCell<Option<Closure<dyn FnMut(MessageEvent)>>>,
 }
 
 #[wasm_bindgen]
@@ -60,14 +61,14 @@ impl WasmPeer {
         let inner = Rc::new(Inner {
             pc,
             data_channel: RefCell::new(None),
-            data_channel_open: RefCell::new(false),
+            is_data_channel_open: RefCell::new(false),
             pending_local_ice: RefCell::new(Vec::new()),
             received_messages: RefCell::new(Vec::new()),
-            on_ice_candidate: RefCell::new(None),
-            on_ice_connection_state_change: RefCell::new(None),
-            on_data_channel: RefCell::new(None),
-            on_open: RefCell::new(None),
-            on_message: RefCell::new(None),
+            on_ice_candidate: OnceCell::new(),
+            on_ice_connection_state_change: OnceCell::new(),
+            on_data_channel: OnceCell::new(),
+            on_data_channel_open: RefCell::new(None),
+            on_data_channel_message: RefCell::new(None),
         });
 
         install_peer_handlers(&inner)?;
@@ -133,7 +134,7 @@ impl WasmPeer {
     }
 
     pub fn send_text(&self, text: String) -> Result<(), JsValue> {
-        if *self.inner.data_channel_open.borrow() {
+        if *self.inner.is_data_channel_open.borrow() {
             let dc = self
                 .inner
                 .data_channel
@@ -148,7 +149,7 @@ impl WasmPeer {
     }
 
     pub fn send_bytes(&self, bytes: Vec<u8>) -> Result<(), JsValue> {
-        if *self.inner.data_channel_open.borrow() {
+        if *self.inner.is_data_channel_open.borrow() {
             let dc = self
                 .inner
                 .data_channel
@@ -224,7 +225,7 @@ fn install_peer_handlers(inner: &Rc<Inner>) -> Result<(), JsValue> {
     inner
         .pc
         .set_onicecandidate(Some(on_ice.as_ref().unchecked_ref()));
-    inner.on_ice_candidate.replace(Some(on_ice));
+    inner.on_ice_candidate.set(on_ice).expect("Should only be init once");
 
     let inner_for_state = Rc::clone(inner);
     let on_ice_state_change = Closure::wrap(Box::new(move |_e: Event| {
@@ -236,7 +237,7 @@ fn install_peer_handlers(inner: &Rc<Inner>) -> Result<(), JsValue> {
         .set_oniceconnectionstatechange(Some(on_ice_state_change.as_ref().unchecked_ref()));
     inner
         .on_ice_connection_state_change
-        .replace(Some(on_ice_state_change));
+        .set(on_ice_state_change).expect("Should only be init once");
 
     let inner_for_dc = Rc::clone(inner);
     let on_data_channel = Closure::wrap(Box::new(move |e: RtcDataChannelEvent| {
@@ -253,7 +254,7 @@ fn install_peer_handlers(inner: &Rc<Inner>) -> Result<(), JsValue> {
     inner
         .pc
         .set_ondatachannel(Some(on_data_channel.as_ref().unchecked_ref()));
-    inner.on_data_channel.replace(Some(on_data_channel));
+    inner.on_data_channel.set(on_data_channel).expect("Should only be init once");
 
     Ok(())
 }
@@ -261,11 +262,11 @@ fn install_peer_handlers(inner: &Rc<Inner>) -> Result<(), JsValue> {
 fn install_data_channel_handlers(inner: &Rc<Inner>, dc: &RtcDataChannel) -> Result<(), JsValue> {
     let inner_for_open = Rc::clone(inner);
     let on_open = Closure::wrap(Box::new(move |_e: Event| {
-        *inner_for_open.data_channel_open.borrow_mut() = true;
+        *inner_for_open.is_data_channel_open.borrow_mut() = true;
         web_sys::console::log_1(&"data channel open".into());
     }) as Box<dyn FnMut(_)>);
     dc.set_onopen(Some(on_open.as_ref().unchecked_ref()));
-    inner.on_open.replace(Some(on_open));
+    inner.on_data_channel_open.replace(Some(on_open));
 
     let inner_for_msg = Rc::clone(inner);
     let on_message = Closure::wrap(Box::new(move |e: MessageEvent| {
@@ -288,7 +289,7 @@ fn install_data_channel_handlers(inner: &Rc<Inner>, dc: &RtcDataChannel) -> Resu
         web_sys::console::warn_1(&"received unsupported message type".into());
     }) as Box<dyn FnMut(_)>);
     dc.set_onmessage(Some(on_message.as_ref().unchecked_ref()));
-    inner.on_message.replace(Some(on_message));
+    inner.on_data_channel_message.replace(Some(on_message));
 
     Ok(())
 }
