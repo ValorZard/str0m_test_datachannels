@@ -375,8 +375,7 @@ fn connect_to_server(server_address: String) {
 
         // Send local ICE candidates as they are gathered.
         loop {
-            if wasm_peer.ice_gathering_state() == RtcIceGatheringState::Complete
-            {
+            if wasm_peer.ice_gathering_state() == RtcIceGatheringState::Complete {
                 log!("Ice gathering is finished");
                 break;
             }

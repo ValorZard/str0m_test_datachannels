@@ -2,7 +2,9 @@ use anyhow::{Result, anyhow, bail};
 use clap::{Parser, ValueEnum};
 use futures_util::StreamExt;
 use native_shared::{
-    install_str0m_process, peer::{Peer, RoleAction}, read_msg, write_msg
+    install_str0m_process,
+    peer::{Peer, RoleAction},
+    read_msg, write_msg,
 };
 use serde_json::Deserializer;
 use signaling_shared::SignalMessage;
@@ -25,12 +27,11 @@ struct Args {
 async fn run_client(args: &Args) -> Result<()> {
     // HAS TO BE RUN BEFORE WEBRTC STUFF RUNS
     install_str0m_process();
-    let server_addr = &args
-        .server_addr;
+    let server_addr = &args.server_addr;
 
     // because the server is already advertising it's public IP, we don't actually need to put in the work to find our own IP
     // so we can put whatever we want here since the "server" peer will be able to directly connect anyways.
-    let advertise_ip = IpAddr::V4(Ipv4Addr::new(192,168,0,0));
+    let advertise_ip = IpAddr::V4(Ipv4Addr::new(192, 168, 0, 0));
 
     let mut peer = Peer::new(advertise_ip, args.udp_port).await?;
     println!("client: UDP bound on {}", peer.bound_addr);
@@ -41,9 +42,7 @@ async fn run_client(args: &Args) -> Result<()> {
 
     println!("connecting to websocket signaling server {server_addr}");
     let (stream, response) = connect_async(server_addr).await?;
-    println!(
-        "client: signaling connected to {server_addr}"
-    );
+    println!("client: signaling connected to {server_addr}");
     println!("client: initial response from server {response:?}");
 
     let offer_sdp = peer.create_offer("chat")?;

@@ -4,7 +4,9 @@ use anyhow::{Result, bail};
 use clap::Parser;
 use futures_util::StreamExt;
 use native_shared::{
-    install_str0m_process, peer::{Peer, RoleAction}, read_msg, write_msg
+    install_str0m_process,
+    peer::{Peer, RoleAction},
+    read_msg, write_msg,
 };
 use signaling_shared::SignalMessage;
 
