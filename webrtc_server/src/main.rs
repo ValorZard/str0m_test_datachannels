@@ -4,7 +4,9 @@ use anyhow::{Result, anyhow, bail};
 use clap::Parser;
 use futures_util::StreamExt;
 use native_shared::{
-    install_str0m_process, peer::{Peer, RoleAction}, read_msg, validate_advertised_addr, write_msg
+    install_str0m_process,
+    peer::{Peer, RoleAction},
+    read_msg, validate_advertised_addr, write_msg,
 };
 use signaling_shared::SignalMessage;
 
@@ -34,7 +36,8 @@ async fn run_server(args: &Args) -> Result<()> {
     let mut join_set = JoinSet::new();
     while let Ok((raw_stream, addr)) = listener.accept().await {
         // this is only really necessary if you are testing server and client on same machine
-        let advertise_addr = validate_advertised_addr(args.advertise_ip, args.udp_port).ok_or(anyhow!("Failed to generate address"))?;
+        let advertise_addr = validate_advertised_addr(args.advertise_ip, args.udp_port)
+            .ok_or(anyhow!("Failed to generate address"))?;
         println!("Advertising server on '{advertise_addr}'");
         println!(
             "Note that if you are running this over the internet proper, the ip of the remote machine you are running this one has to be passed through to the server process itself as the advertise_ip."

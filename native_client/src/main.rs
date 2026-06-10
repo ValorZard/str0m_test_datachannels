@@ -1,8 +1,10 @@
-use anyhow::{Result, bail, anyhow};
+use anyhow::{Result, anyhow, bail};
 use clap::Parser;
 use futures_util::StreamExt;
 use native_shared::{
-    install_str0m_process, peer::{Peer, RoleAction}, read_msg, validate_advertised_addr, write_msg
+    install_str0m_process,
+    peer::{Peer, RoleAction},
+    read_msg, validate_advertised_addr, write_msg,
 };
 use signaling_shared::SignalMessage;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
@@ -28,13 +30,12 @@ async fn run_client(args: &Args) -> Result<()> {
 
     // because the server is already advertising it's public IP, we don't actually need to put in the work to find our own IP
     // so we can put whatever we want here since the "server" peer will be able to directly connect anyways.
-    let advertised_addr = validate_advertised_addr(IpAddr::V4(Ipv4Addr::LOCALHOST), args.udp_port).ok_or(anyhow!("Failed to generate address"))?;
+    let advertised_addr = validate_advertised_addr(IpAddr::V4(Ipv4Addr::LOCALHOST), args.udp_port)
+        .ok_or(anyhow!("Failed to generate address"))?;
 
     let mut peer = Peer::new(advertised_addr).await?;
     println!("client: UDP bound on {}", peer.bound_addr);
-    println!(
-        "client: advertising ICE candidate {advertised_addr}",
-    );
+    println!("client: advertising ICE candidate {advertised_addr}",);
 
     println!("connecting to websocket signaling server {server_addr}");
     let (stream, response) = connect_async(server_addr).await?;

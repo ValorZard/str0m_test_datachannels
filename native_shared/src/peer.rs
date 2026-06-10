@@ -60,7 +60,8 @@ impl Peer {
     pub async fn new(advertised_addr: SocketAddr) -> Result<Self> {
         let bind_ip = IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0));
 
-        let std_socket = std::net::UdpSocket::bind(SocketAddr::new(bind_ip, advertised_addr.port()))?;
+        let std_socket =
+            std::net::UdpSocket::bind(SocketAddr::new(bind_ip, advertised_addr.port()))?;
         std_socket.set_nonblocking(true)?;
         let socket = UdpSocket::from_std(std_socket)?;
 

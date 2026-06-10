@@ -17,9 +17,9 @@ pub fn install_str0m_process() {
 
 // either return the advertise ip if its correct, or else generate a good one
 // this is especially useful for local testing since IP addresses and ports might be in use
-pub fn validate_advertised_addr(advertise_ip: IpAddr, udp_port: u16)  -> Option<SocketAddr> {
+pub fn validate_advertised_addr(advertise_ip: IpAddr, udp_port: u16) -> Option<SocketAddr> {
     if advertise_ip.is_loopback() {
-         // Discover the preferred outbound local interface without sending traffic.
+        // Discover the preferred outbound local interface without sending traffic.
         let socket = std::net::UdpSocket::bind("0.0.0.0:0").ok()?;
         socket.connect("1.1.1.1:80").ok()?;
         return Some(socket.local_addr().ok()?);
