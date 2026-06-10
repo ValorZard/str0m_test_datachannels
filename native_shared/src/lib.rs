@@ -34,7 +34,8 @@ pub fn validate_advertised_addr(advertise_ip: IpAddr, udp_port: u16) -> Option<S
     // If the requested port is already in use, keep the same advertised IP but let the OS
     // choose a free port so the session can still establish.
     // (Binding to port 0 generates a fresh random port we can use)
-    let fallback_socket = std::net::UdpSocket::bind(SocketAddr::new(advertised_addr.ip(), 0)).ok()?;
+    let fallback_socket =
+        std::net::UdpSocket::bind(SocketAddr::new(advertised_addr.ip(), 0)).ok()?;
     Some(fallback_socket.local_addr().ok()?)
 }
 
