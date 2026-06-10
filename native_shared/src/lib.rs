@@ -18,14 +18,24 @@ pub fn install_str0m_process() {
 // either return the advertise ip if its correct, or else generate a good one
 // this is especially useful for local testing since IP addresses and ports might be in use
 pub fn validate_advertised_addr(advertise_ip: IpAddr, udp_port: u16) -> Option<SocketAddr> {
-    if advertise_ip.is_loopback() {
+    let advertised_addr = if advertise_ip.is_loopback() {
         // Discover the preferred outbound local interface without sending traffic.
         let socket = std::net::UdpSocket::bind("0.0.0.0:0").ok()?;
         socket.connect("1.1.1.1:80").ok()?;
-        return Some(socket.local_addr().ok()?);
+        socket.local_addr().ok()?
+    } else {
+        SocketAddr::new(advertise_ip, udp_port)
+    };
+
+    if std::net::UdpSocket::bind(advertised_addr).is_ok() {
+        return Some(advertised_addr);
     }
-    // For actual production deployment, we just return the advertised ip back
-    Some(SocketAddr::new(advertise_ip, udp_port))
+
+    // If the requested port is already in use, keep the same advertised IP but let the OS
+    // choose a free port so the session can still establish.
+    // (Binding to port 0 generates a fresh random port we can use)
+    let fallback_socket = std::net::UdpSocket::bind(SocketAddr::new(advertised_addr.ip(), 0)).ok()?;
+    Some(fallback_socket.local_addr().ok()?)
 }
 
 pub async fn write_msg<S>(

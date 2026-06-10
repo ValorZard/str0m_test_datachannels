@@ -27,7 +27,7 @@ struct Args {
     udp_port: u16,
 }
 
-async fn run_server(args: &Args) -> Result<()> {
+async fn run_server(args: Args) -> Result<()> {
     // HAS TO BE RUN BEFORE WEBRTC STUFF RUNS
     install_str0m_process();
     let listener = TcpListener::bind((args.bind_ip, args.signal_port)).await?;
@@ -122,7 +122,7 @@ async fn run_server(args: &Args) -> Result<()> {
 async fn main() -> Result<()> {
     let args = Args::parse();
 
-    run_server(&args).await?;
+    run_server(args).await?;
 
     Ok(())
 }
