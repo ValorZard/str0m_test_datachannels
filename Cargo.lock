@@ -318,6 +318,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "common"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "console_error_panic_hook"
 version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -828,11 +836,11 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "common",
  "futures-util",
  "native_shared",
  "serde",
  "serde_json",
- "signaling_shared",
  "tokio",
  "tokio-tungstenite",
 ]
@@ -842,10 +850,10 @@ name = "native_shared"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "common",
  "futures-util",
  "serde",
  "serde_json",
- "signaling_shared",
  "str0m",
  "tokio",
  "tokio-tungstenite",
@@ -1332,14 +1340,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "signaling_shared"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "signature"
 version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1733,13 +1733,13 @@ name = "wasm_client"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "common",
  "console_error_panic_hook",
  "futures-util",
  "gloo-timers",
  "js-sys",
  "serde",
  "serde_json",
- "signaling_shared",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
@@ -1762,11 +1762,11 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "common",
  "futures-util",
  "native_shared",
  "serde",
  "serde_json",
- "signaling_shared",
  "tokio",
  "tokio-tungstenite",
 ]

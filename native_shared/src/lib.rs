@@ -5,7 +5,7 @@ use futures_util::{
     SinkExt, StreamExt,
     stream::{SplitSink, SplitStream},
 };
-use signaling_shared::SignalMessage;
+use common::SignalMessage;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio_tungstenite::{WebSocketStream, tungstenite};
 pub mod peer;

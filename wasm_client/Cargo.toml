@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-signaling_shared = {path = "../signaling_shared/"}
+common = {path = "../common/"}
 anyhow = {workspace = true}
 console_error_panic_hook = "0.1"
 js-sys = "0.3"

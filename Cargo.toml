@@ -11,7 +11,7 @@ categories = ["web-programming", "network-programming"]
 edition = "2024"
 
 [workspace]
-members = ["native_client", "webrtc_server", "native_shared", "wasm_client", "signaling_shared"]
+members = ["native_client", "webrtc_server", "native_shared", "wasm_client", "common"]
 resolver = "3"
 
 [workspace.dependencies]

@@ -8,7 +8,7 @@ use native_shared::{
     peer::{Peer, RoleAction},
     read_msg, validate_advertised_addr, write_msg,
 };
-use signaling_shared::SignalMessage;
+use common::SignalMessage;
 
 use tokio::{net::TcpListener, sync::oneshot, task::JoinSet};
 

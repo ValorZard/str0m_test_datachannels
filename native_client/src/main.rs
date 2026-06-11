@@ -6,7 +6,7 @@ use native_shared::{
     peer::{Peer, RoleAction},
     read_msg, validate_advertised_addr, write_msg,
 };
-use signaling_shared::SignalMessage;
+use common::SignalMessage;
 use std::net::{IpAddr, Ipv4Addr};
 use tokio::sync::oneshot;
 use tokio_tungstenite::connect_async;

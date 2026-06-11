@@ -3,7 +3,7 @@ use futures_util::{SinkExt, StreamExt};
 use gloo_timers::future::TimeoutFuture;
 use js_sys::{Array, Uint8Array};
 use serde::{Deserialize, Serialize};
-use signaling_shared::SignalMessage;
+use common::SignalMessage;
 use std::cell::OnceCell;
 use std::{cell::RefCell, rc::Rc};
 use wasm_bindgen::JsCast;
