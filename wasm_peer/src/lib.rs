@@ -345,7 +345,9 @@ impl PeerFactory for WasmPeerFactory {
         let (ws, wsio) = match WsMeta::connect(server_address.clone(), None).await {
             Ok(parts) => parts,
             Err(e) => {
-                return Err(format!("WebSocket connect failed for {}: {:?}", server_address, e).into());
+                return Err(
+                    format!("WebSocket connect failed for {}: {:?}", server_address, e).into(),
+                );
             }
         };
 

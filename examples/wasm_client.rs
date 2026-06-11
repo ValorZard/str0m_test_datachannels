@@ -4,13 +4,13 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen::closure::Closure;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::{JsFuture, spawn_local};
+use wasm_peer::{WasmPeer, WasmPeerFactory, peer_log};
 use web_sys::{
     Event, HtmlElement, HtmlInputElement, MessageEvent, RtcConfiguration, RtcDataChannel,
     RtcDataChannelEvent, RtcIceCandidate, RtcIceCandidateInit, RtcIceConnectionState,
     RtcIceGatheringState, RtcIceServer, RtcPeerConnection, RtcPeerConnectionIceEvent, RtcSdpType,
     RtcSessionDescriptionInit,
 };
-use wasm_peer::{WasmPeer, WasmPeerFactory, peer_log};
 
 fn connect_to_server(server_address: String) {
     spawn_local(async move {
