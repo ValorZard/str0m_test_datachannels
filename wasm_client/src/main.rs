@@ -1,7 +1,7 @@
-use anyhow::{Result, anyhow};
+use anyhow::Result;
 use futures_util::{SinkExt, StreamExt};
 use gloo_timers::future::TimeoutFuture;
-use js_sys::{Array, Reflect, Uint8Array};
+use js_sys::{Array, Uint8Array};
 use serde::{Deserialize, Serialize};
 use signaling_shared::SignalMessage;
 use std::cell::OnceCell;
@@ -11,7 +11,7 @@ use wasm_bindgen::closure::Closure;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::{JsFuture, spawn_local};
 use web_sys::{
-    Element, Event, HtmlButtonElement, HtmlElement, HtmlInputElement, MessageEvent,
+    Event, HtmlElement, HtmlInputElement, MessageEvent,
     RtcConfiguration, RtcDataChannel, RtcDataChannelEvent, RtcIceCandidate, RtcIceCandidateInit,
     RtcIceConnectionState, RtcIceGatheringState, RtcIceServer, RtcPeerConnection,
     RtcPeerConnectionIceEvent, RtcSdpType, RtcSessionDescriptionInit,
@@ -200,13 +200,13 @@ impl WasmPeer {
 }
 
 fn make_rtc_config() -> RtcConfiguration {
-    let mut stun = RtcIceServer::new();
+    let stun = RtcIceServer::new();
     stun.set_urls(&JsValue::from_str("stun:stun.l.google.com:19302"));
 
     let servers = Array::new();
     servers.push(&stun);
 
-    let mut config = RtcConfiguration::new();
+    let config = RtcConfiguration::new();
     config.set_ice_servers(&servers);
     config
 }
@@ -379,7 +379,7 @@ fn main() {
 
     let window = web_sys::window().expect("no global `window` exists");
     let document = window.document().expect("should have a document on window");
-    let body = document.body().expect("document should have a body");
+    let _body = document.body().expect("document should have a body");
 
     let server_searchbox = document
         .get_element_by_id("server-searchbox")
