@@ -204,14 +204,8 @@ impl Peer for WasmPeer {
 }
 
 fn make_rtc_config() -> RtcConfiguration {
-    let stun = RtcIceServer::new();
-    stun.set_urls(&JsValue::from_str("stun:stun.l.google.com:19302"));
-
-    let servers = Array::new();
-    servers.push(&stun);
-
+    // since we are directly connected to a public server with a public IP, we don't need a STUN server
     let config = RtcConfiguration::new();
-    config.set_ice_servers(&servers);
     config
 }
 
