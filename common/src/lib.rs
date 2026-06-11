@@ -16,13 +16,12 @@ impl SignalMessage {
     }
 }
 
-#[allow(async_fn_in_trait)]
 pub trait Peer {
     type Error;
 
-    async fn create_offer(&mut self, channel_label: &str) -> Result<String, Self::Error>;
+    fn create_offer(&mut self, channel_label: &str) -> impl Future<Output = Result<String, Self::Error>>;
 
-    async fn accept_offer(&mut self, sdp_offer: &str) -> Result<String, Self::Error>;
+    fn accept_offer(&mut self, sdp_offer: &str) -> impl Future<Output = Result<String, Self::Error>>;
 
-    async fn accept_answer(&mut self, sdp_answer: &str) -> Result<(), Self::Error>;
+    fn accept_answer(&mut self, sdp_answer: &str) -> impl Future<Output = Result<(), Self::Error>>;
 }
