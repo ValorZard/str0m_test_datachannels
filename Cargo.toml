@@ -1,3 +1,15 @@
+[package]
+name = "datachannel-socket"
+version = "0.1.0"
+authors = ["Srayan Jana <srayan.jana@outlook.com>"]
+description = "Cross-Platform WebRTC Datachannels for Client-Server apps."
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/ValorZard/datachannel-socket-rs"
+readme = "README.md"
+keywords = ["webrtc"]
+categories = ["web-programming", "network-programming"]
+edition = "2024"
+
 [workspace]
 members = ["native_client", "webrtc_server", "native_shared", "wasm_client", "signaling_shared"]
 resolver = "3"
