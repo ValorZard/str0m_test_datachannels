@@ -17,9 +17,9 @@ exclude = ["examples/*"]
 
 [workspace.dependencies]
 # Internal crates
-datachannel_socket_native_peer = {path = "./native_peer/"}
-datachannel_socket_common = {path = "./common/"}
-datachannel_socket_wasm_peer = {path = "./wasm_peer/"}
+datachannel_socket_native_peer = {path = "./native_peer/", version = "0.1.0"}
+datachannel_socket_common = {path = "./common/", version = "0.1.0"}
+datachannel_socket_wasm_peer = {path = "./wasm_peer/", version = "0.1.0"}
 
 # dependencies
 anyhow = "1"
