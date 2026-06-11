@@ -66,13 +66,8 @@ async fn run_client(args: &Args) -> Result<()> {
         }
     });
 
-    peer.run(
-        "client",
-        RoleAction::ClientSendAndWait { message: msg },
-        None,
-        tx,
-    )
-    .await
+    peer.run("client", RoleAction::ClientSendAndWait { message: msg }, tx)
+        .await
 }
 
 #[tokio::main]

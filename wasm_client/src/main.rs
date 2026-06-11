@@ -4,6 +4,7 @@ use gloo_timers::future::TimeoutFuture;
 use js_sys::{Array, Reflect, Uint8Array};
 use serde::{Deserialize, Serialize};
 use signaling_shared::SignalMessage;
+use std::cell::OnceCell;
 use std::{cell::RefCell, rc::Rc};
 use wasm_bindgen::JsCast;
 use wasm_bindgen::closure::Closure;
@@ -16,7 +17,6 @@ use web_sys::{
     RtcPeerConnectionIceEvent, RtcSdpType, RtcSessionDescriptionInit,
 };
 use ws_stream_wasm::{WsMessage, WsMeta};
-use std::cell::OnceCell;
 
 #[macro_export]
 macro_rules! log {
@@ -235,7 +235,10 @@ fn install_peer_handlers(inner: &Rc<Inner>) -> Result<(), JsValue> {
     inner
         .pc
         .set_onicecandidate(Some(on_ice.as_ref().unchecked_ref()));
-    inner.on_ice_candidate.set(on_ice).expect("Should only be init once");
+    inner
+        .on_ice_candidate
+        .set(on_ice)
+        .expect("Should only be init once");
 
     let inner_for_state = Rc::clone(inner);
     let on_ice_state_change = Closure::wrap(Box::new(move |_e: Event| {
@@ -247,7 +250,8 @@ fn install_peer_handlers(inner: &Rc<Inner>) -> Result<(), JsValue> {
         .set_oniceconnectionstatechange(Some(on_ice_state_change.as_ref().unchecked_ref()));
     inner
         .on_ice_connection_state_change
-        .set(on_ice_state_change).expect("Should only be init once");
+        .set(on_ice_state_change)
+        .expect("Should only be init once");
 
     let inner_for_dc = Rc::clone(inner);
     let on_data_channel = Closure::wrap(Box::new(move |e: RtcDataChannelEvent| {
@@ -264,7 +268,10 @@ fn install_peer_handlers(inner: &Rc<Inner>) -> Result<(), JsValue> {
     inner
         .pc
         .set_ondatachannel(Some(on_data_channel.as_ref().unchecked_ref()));
-    inner.on_data_channel.set(on_data_channel).expect("Should only be init once");
+    inner
+        .on_data_channel
+        .set(on_data_channel)
+        .expect("Should only be init once");
 
     Ok(())
 }
@@ -318,7 +325,7 @@ fn connect_to_server(server_address: String) {
     spawn_local(async move {
         let wasm_peer = Rc::new(WasmPeer::new().expect("should work"));
 
-        let (_ws, wsio) = match WsMeta::connect(server_address.clone(), None).await {
+        let (ws, wsio) = match WsMeta::connect(server_address.clone(), None).await {
             Ok(parts) => parts,
             Err(e) => {
                 log!("WebSocket connect failed for {}: {:?}", server_address, e);
@@ -337,15 +344,15 @@ fn connect_to_server(server_address: String) {
         loop {
             if let Some(WsMessage::Text(answer_string)) = recv_stream.next().await {
                 let parsed_answer = serde_json::from_str::<SignalMessage>(&answer_string).unwrap();
-                let answer_sdp = parsed_answer.sdp().unwrap();
+                let answer_sdp = parsed_answer.sdp();
                 log!("received answer sdp: {:?}", answer_sdp);
-                wasm_peer
-                    .accept_answer(answer_sdp.clone())
-                    .await
-                    .unwrap();
+                wasm_peer.accept_answer(answer_sdp.clone()).await.unwrap();
                 break;
             }
         }
+
+        // we can close the websocket now, webrtc connection is bootstrapped
+        let _ = ws.close();
 
         // send until its open
         loop {

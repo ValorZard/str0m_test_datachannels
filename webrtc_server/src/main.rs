@@ -78,33 +78,9 @@ async fn run_server(args: Args) -> Result<()> {
                 .await?;
 
                 let (ice_sender, ice_receiver) = tokio::sync::mpsc::unbounded_channel::<String>();
-                let signal_task = tokio::spawn(async move {
-                    loop {
-                        let msg = match read_msg(&mut read_stream).await {
-                            Ok(m) => m,
-                            Err(err) => {
-                                eprintln!("server: signaling read ended: {err}");
-                                break;
-                            }
-                        };
-
-                        match msg {
-                            SignalMessage::IceCandidate { candidate } => {
-                                if ice_sender.send(candidate).is_err() {
-                                    break;
-                                }
-                            }
-                            SignalMessage::Offer { .. } | SignalMessage::Answer { .. } => {
-                                eprintln!("server: unexpected signaling message after answer");
-                            }
-                        }
-                    }
-                });
 
                 let (tx, _rx) = oneshot::channel::<Vec<u8>>();
-                peer.run("server", RoleAction::EchoServer, Some(ice_receiver), tx)
-                    .await?;
-                let _ = signal_task.await;
+                peer.run("server", RoleAction::EchoServer, tx).await?;
                 Ok(())
             }
             .await;

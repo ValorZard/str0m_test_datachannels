@@ -136,7 +136,6 @@ impl Peer {
         &mut self,
         peer_name: &str,
         action: RoleAction,
-        mut remote_ice_receiver: Option<mpsc::UnboundedReceiver<String>>,
         done_tx: oneshot::Sender<Vec<u8>>,
     ) -> Result<()> {
         let mut buf = vec![0u8; 65535];
@@ -146,29 +145,6 @@ impl Peer {
         let mut buffered_echo: Vec<(ChannelId, bool, Vec<u8>)> = Vec::new();
 
         loop {
-            // Apply any trickled remote ICE candidates before polling RTC output.
-            if let Some(rx) = remote_ice_receiver.as_mut() {
-                loop {
-                    match rx.try_recv() {
-                        Ok(candidate) => {
-                            self.add_remote_ice_candidate(candidate)?;
-                        }
-                        Err(mpsc::error::TryRecvError::Empty) => {
-                            break;
-                        }
-                        Err(mpsc::error::TryRecvError::Disconnected) => {
-                            if matches!(&action, RoleAction::EchoServer) {
-                                println!(
-                                    "{peer_name}: signaling disconnected; ending echo session"
-                                );
-                                return Ok(());
-                            }
-                            break;
-                        }
-                    }
-                }
-            }
-
             let next_timeout = loop {
                 match self.rtc.poll_output()? {
                     Output::Timeout(t) => break t,
