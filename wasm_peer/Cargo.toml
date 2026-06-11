@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-datachannel_socket_common = {path = "../common/"}
+datachannel_socket_common = {path = "../common/", version = "0.1.0"}
 anyhow = {workspace = true}
 console_error_panic_hook = {workspace = true}
 js-sys = {workspace = true}
