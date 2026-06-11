@@ -7,8 +7,8 @@ use native_shared::{
     read_msg, validate_advertised_addr, write_msg,
 };
 use signaling_shared::SignalMessage;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use tokio::{net::TcpStream, sync::oneshot};
+use std::net::{IpAddr, Ipv4Addr};
+use tokio::sync::oneshot;
 use tokio_tungstenite::connect_async;
 
 #[derive(Debug, Parser)]
