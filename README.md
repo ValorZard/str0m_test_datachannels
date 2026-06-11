@@ -1,12 +1,24 @@
 # datachannel socket
 
-Connect to a [str0m](https://github.com/algesten/str0m) webrtc peer through either a native client (using str0m itself) or a WASM client using a websocket signaling server.
+Connect to a [str0m](https://github.com/algesten/str0m) webrtc "server" peer through either a native client (using str0m itself) or a WASM client using a websocket signaling server.
 
 Native str0m clients can bypass using STUN/TURN by just sending its own IP address directly.
 
 The reason is that the entire point of STUN/TURN is for clients to discover their own public IP address and port number. But, that's only needed in the browser for security reasons. If we are launching from our own machine we can just ... look up our own IP ourselves.
 
 The WASM Client is stuck having to use STUN/TURN/ICE trickling, though, and it's a little annoying if you want Trickle ICE. Just waiting for all ICE candidates to show up before connecting works, but adds extra startup time.
+
+# Caveats
+
+**Right now this can only work as an echo server. I'm releasing this library now to make sure this can work on different people's computer in real world situations before continuing development.**
+
+To be very clear, this is ONLY interested in turning WebRTC to give UDP-level performance in the browser using a client-server archiecture that works with all the major browsers.
+
+If you want to use webrtc to make a peer to peer game, checkout [matchbox](https://github.com/johanhelsing/matchbox).
+
+If you don't care about Firefox or Safari, and are okay with only having something work on Chrome, use WebTransport. I'm fond of this library in particular: https://github.com/MOZGIII/xwt
+
+If you don't care about the browser but are interested in WebRTC for the P2P stuff, might I suggest you use [iroh]() instead?
 
 # How to run
 ## Localhost test
