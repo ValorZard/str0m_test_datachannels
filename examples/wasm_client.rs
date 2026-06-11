@@ -1,10 +1,10 @@
 use datachannel_socket::common::{Peer, PeerFactory, SignalMessage};
+use datachannel_socket::wasm_peer::{WasmPeer, WasmPeerFactory, peer_log};
 use gloo_timers::future::TimeoutFuture;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::closure::Closure;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::{JsFuture, spawn_local};
-use datachannel_socket::wasm_peer::{WasmPeer, WasmPeerFactory, peer_log};
 use web_sys::{
     Event, HtmlElement, HtmlInputElement, MessageEvent, RtcConfiguration, RtcDataChannel,
     RtcDataChannelEvent, RtcIceCandidate, RtcIceCandidateInit, RtcIceConnectionState,
