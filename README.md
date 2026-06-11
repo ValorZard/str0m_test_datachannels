@@ -18,7 +18,7 @@ If you want to use webrtc to make a peer to peer game, checkout [matchbox](https
 
 If you don't care about Firefox or Safari, and are okay with only having something work on Chrome, use WebTransport. I'm fond of this library in particular: https://github.com/MOZGIII/xwt
 
-If you don't care about the browser but are interested in WebRTC for the P2P stuff, might I suggest you use [iroh]() instead?
+If you don't care about the browser but are interested in WebRTC for the P2P stuff, might I suggest you use [iroh](https://www.iroh.computer/) instead?
 
 # How to run
 ## Localhost test
