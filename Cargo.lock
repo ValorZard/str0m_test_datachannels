@@ -428,6 +428,7 @@ name = "datachannel_socket_native_peer"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "clap",
  "datachannel_socket_common",
  "futures-util",
  "serde",

@@ -1,7 +1,7 @@
 use anyhow::{Result, anyhow, bail};
 use clap::Parser;
-use datachannel_socket::common::PeerFactory;
-use datachannel_socket::native_peer::{NativeClientPeerFactory, NativePeer, RoleAction};
+use datachannel_socket_common::PeerFactory;
+use datachannel_socket_native_peer::{NativeClientPeerFactory, NativePeer, RoleAction};
 use tokio::sync::oneshot;
 
 #[derive(Debug, Parser)]

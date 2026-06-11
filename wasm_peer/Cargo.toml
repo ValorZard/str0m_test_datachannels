@@ -43,3 +43,12 @@ features = [
     "Document", "Element", "HtmlElement", "Node", "Window",
     "HtmlInputElement","HtmlButtonElement"
 ]
+
+
+[dev-dependencies]
+anyhow = {workspace = true}
+console_error_panic_hook = {workspace = true}
+wasm-bindgen = {workspace = true}
+wasm-bindgen-futures = {workspace = true}
+web-sys = {workspace = true}
+gloo-timers = { workspace = true}

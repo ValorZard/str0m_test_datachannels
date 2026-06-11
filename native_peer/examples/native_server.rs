@@ -2,8 +2,8 @@ use std::net::IpAddr;
 
 use anyhow::{Result, anyhow, bail};
 use clap::Parser;
-use datachannel_socket::common::{Peer, PeerFactory, SignalMessage};
-use datachannel_socket::native_peer::{NativePeer, NativeServerPeerFactory, RoleAction};
+use datachannel_socket_common::{Peer, PeerFactory, SignalMessage};
+use datachannel_socket_native_peer::{NativePeer, NativeServerPeerFactory, RoleAction};
 
 use tokio::{net::TcpListener, sync::oneshot, task::JoinSet};
 

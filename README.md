@@ -31,7 +31,7 @@ We do still use ICE for setting up the connection and connectivity checks, but w
 ### Server:
 
 ```bash
-cargo run --example native_server
+cargo run -p datachannel_socket_native_peer --example native_server
 ```
 
 Note: running the server locally will require the server to generate a non-loopback address for certain targets to connect to it properly.
@@ -52,7 +52,7 @@ This is because firefox doesn't like it when you connect to WebRTC using a loopb
 ### Native Client:
 
 ```bash
-cargo run --example native_client  -- --server-addr "ws://127.0.0.1:7000"
+cargo run -p datachannel_socket_native_peer --example native_client  -- --server-addr "ws://127.0.0.1:7000"
 ```
 
 ### WASM Client:
@@ -60,6 +60,7 @@ You will need to have installed [trunk](https://github.com/trunk-rs/trunk).
 
 Then, you can just do:
 ```bash
+cd wasm_peer
 trunk serve --example wasm_client
 ```
 
@@ -69,12 +70,12 @@ trunk serve --example wasm_client
 On the server machine:
 
 ```bash
-cargo run --example native_server -- --advertise-ip YOUR_PUBLIC_SERVER_IP
+cargo run -p datachannel_socket_native_peer --example native_server -- --advertise-ip YOUR_PUBLIC_SERVER_IP
 ```
 On the client machine:
 
 ```bash
-cargo run --example native_client -- --server-addr YOUR_SIGNALING_SERVER_ADDR
+cargo run -p datachannel_socket_native_peer -- --server-addr YOUR_SIGNALING_SERVER_ADDR
 ```
 
 Note that the client peer doesn't need to advertise it's own IP address. This is because because the server is already advertising it's public IP, we don't actually need to put in the work to find our own IP. So, as long as we put in a somewhat valid IP address, the server peer will be able to connect to the client peer.
