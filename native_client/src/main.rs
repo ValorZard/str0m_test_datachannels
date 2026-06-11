@@ -3,7 +3,6 @@ use clap::Parser;
 use common::{Peer, SignalMessage};
 use futures_util::StreamExt;
 use native_shared::{
-    install_str0m_process,
     peer::{NativePeer, RoleAction},
     read_msg, validate_advertised_addr, write_msg,
 };
@@ -25,7 +24,6 @@ struct Args {
 
 async fn run_client(args: &Args) -> Result<()> {
     // HAS TO BE RUN BEFORE WEBRTC STUFF RUNS
-    install_str0m_process();
     let server_addr = &args.server_addr;
 
     // because the server is already advertising it's public IP, we don't actually need to put in the work to find our own IP

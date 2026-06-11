@@ -10,11 +10,6 @@ use tokio::io::{AsyncRead, AsyncWrite};
 use tokio_tungstenite::{WebSocketStream, tungstenite};
 pub mod peer;
 
-// IMPORTANT! THIS HAS TO BE CALLED BEFORE ALL STR0M WEBRTC STUFF
-pub fn install_str0m_process() {
-    str0m::crypto::from_feature_flags().install_process_default();
-}
-
 // either return the advertise ip if its correct, or else generate a good one
 // this is especially useful for local testing since IP addresses and ports might be in use
 pub fn validate_advertised_addr(advertise_ip: IpAddr, udp_port: u16) -> Option<SocketAddr> {

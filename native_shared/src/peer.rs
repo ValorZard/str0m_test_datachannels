@@ -1,5 +1,5 @@
 use anyhow::Result;
-use common::Peer;
+use common::{Peer, PeerFactory};
 use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr},
     time::Instant,
@@ -26,7 +26,7 @@ pub struct NativePeer {
 }
 
 impl NativePeer {
-    pub async fn new(advertised_addr: SocketAddr) -> Result<Self> {
+    pub async fn new(advertised_addr: SocketAddr) -> Result<Self, std::io::Error> {
         let bind_ip = IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0));
 
         let std_socket =
@@ -37,7 +37,8 @@ impl NativePeer {
         let bound_addr = socket.local_addr()?;
 
         let rtc = RtcConfig::new().build(Instant::now());
-        let candidate = Candidate::host(advertised_addr, "udp")?;
+        let candidate = Candidate::host(advertised_addr, "udp")
+            .map_err(|e| std::io::Error::other(e.to_string()))?;
 
         let mut peer = Self {
             rtc,
@@ -227,5 +228,26 @@ impl Peer for NativePeer {
             .accept_answer(pending, answer)
             .map_err(|e| std::io::Error::other(e.to_string()))?;
         Ok(())
+    }
+}
+
+pub struct NativePeerFactory {}
+
+// native
+impl PeerFactory for NativePeerFactory {
+    type Error = std::io::Error;
+    type PeerType = NativePeer;
+    type CreateArgs = std::net::SocketAddr;
+
+    fn new() -> Self {
+        str0m::crypto::from_feature_flags().install_process_default();
+        Self {}
+    }
+
+    async fn create_peer(
+        &self,
+        advertise_addr: Self::CreateArgs,
+    ) -> Result<Self::PeerType, Self::Error> {
+        NativePeer::new(advertise_addr).await
     }
 }

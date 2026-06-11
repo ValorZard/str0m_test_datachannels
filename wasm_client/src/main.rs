@@ -1,5 +1,5 @@
 use anyhow::Result;
-use common::{Peer, SignalMessage};
+use common::{Peer, PeerFactory, SignalMessage};
 use futures_util::{SinkExt, StreamExt};
 use gloo_timers::future::TimeoutFuture;
 use js_sys::{Array, Uint8Array};
@@ -323,9 +323,28 @@ pub fn drain_local_ice_candidates(peer: Rc<WasmPeer>) -> Vec<IceCandidateMessage
         .collect()
 }
 
+struct WasmPeerFactory {}
+
+impl PeerFactory for WasmPeerFactory {
+    type Error = JsValue;
+
+    type PeerType = WasmPeer;
+
+    type CreateArgs = ();
+
+    fn new() -> Self {
+        Self {}
+    }
+
+    async fn create_peer(&self, _: Self::CreateArgs) -> Result<WasmPeer, Self::Error> {
+        WasmPeer::new()
+    }
+}
+
 fn connect_to_server(server_address: String) {
     spawn_local(async move {
-        let mut wasm_peer = WasmPeer::new().expect("should work");
+        let factory = WasmPeerFactory::new();
+        let mut wasm_peer = factory.create_peer(()).await.expect("should work");
 
         let (ws, wsio) = match WsMeta::connect(server_address.clone(), None).await {
             Ok(parts) => parts,

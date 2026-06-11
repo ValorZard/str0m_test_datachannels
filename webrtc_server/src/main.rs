@@ -2,11 +2,10 @@ use std::net::IpAddr;
 
 use anyhow::{Result, anyhow, bail};
 use clap::Parser;
-use common::{Peer, SignalMessage};
+use common::{Peer, PeerFactory, SignalMessage};
 use futures_util::StreamExt;
 use native_shared::{
-    install_str0m_process,
-    peer::{NativePeer, RoleAction},
+    peer::{NativePeer, NativePeerFactory, RoleAction},
     read_msg, validate_advertised_addr, write_msg,
 };
 
@@ -29,7 +28,7 @@ struct Args {
 
 async fn run_server(args: Args) -> Result<()> {
     // HAS TO BE RUN BEFORE WEBRTC STUFF RUNS
-    install_str0m_process();
+    let factory = NativePeerFactory::new();
     let listener = TcpListener::bind((args.bind_ip, args.signal_port)).await?;
     println!("server: signaling on {}:{}", args.bind_ip, args.signal_port);
 
@@ -48,12 +47,12 @@ async fn run_server(args: Args) -> Result<()> {
             );
         }
 
+        let mut peer = factory.create_peer(advertise_addr).await?;
+        println!("server: UDP bound on {}", peer.bound_addr);
+        println!("server: advertising ICE candidate {}", peer.advertised_addr);
+
         join_set.spawn(async move {
             let result: Result<()> = async {
-                let mut peer = NativePeer::new(advertise_addr).await?;
-                println!("server: UDP bound on {}", peer.bound_addr);
-                println!("server: advertising ICE candidate {}", peer.advertised_addr);
-
                 let ws_stream = match tokio_tungstenite::accept_async(raw_stream).await {
                     Ok(ws) => ws,
                     Err(err) => {
