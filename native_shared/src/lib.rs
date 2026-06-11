@@ -321,6 +321,7 @@ pub struct NativeClientPeerFactory {}
 impl PeerFactory for NativeClientPeerFactory {
     type Error = std::io::Error;
     type PeerType = NativePeer;
+    // String is url to signaling server, u16 is what port the client is connecting to the server peer with.
     type CreateArgs = (String, u16);
     type FactoryArgs = ();
 
@@ -374,6 +375,7 @@ impl PeerFactory for NativeServerPeerFactory {
     type Error = std::io::Error;
     type PeerType = NativePeer;
     type FactoryArgs = TcpListener;
+    // The IpAddr is the advertised IP (which should be the server's public internet IP), and the u16 is the port it will try to listen on.
     type CreateArgs = (IpAddr, u16);
 
     fn new(args: Self::FactoryArgs) -> Self {
