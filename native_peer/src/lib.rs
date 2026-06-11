@@ -1,4 +1,4 @@
-use anyhow::{Result, anyhow};
+use anyhow::Result;
 use datachannel_socket_common::{Peer, PeerFactory, SignalMessage};
 use futures_util::{
     SinkExt, StreamExt,
