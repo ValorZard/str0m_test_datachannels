@@ -5,10 +5,10 @@ use clap::Parser;
 use futures_util::StreamExt;
 use native_shared::{
     install_str0m_process,
-    peer::{Peer, RoleAction},
+    peer::{NativePeer, RoleAction},
     read_msg, validate_advertised_addr, write_msg,
 };
-use common::SignalMessage;
+use common::{Peer, SignalMessage};
 
 use tokio::{net::TcpListener, sync::oneshot, task::JoinSet};
 
@@ -50,7 +50,7 @@ async fn run_server(args: Args) -> Result<()> {
 
         join_set.spawn(async move {
             let result: Result<()> = async {
-                let mut peer = Peer::new(advertise_addr).await?;
+                let mut peer = NativePeer::new(advertise_addr).await?;
                 println!("server: UDP bound on {}", peer.bound_addr);
                 println!("server: advertising ICE candidate {}", peer.advertised_addr);
 
@@ -67,7 +67,7 @@ async fn run_server(args: Args) -> Result<()> {
 
                 let offer = read_msg(&mut read_stream).await?;
                 let answer_sdp = match offer {
-                    SignalMessage::Offer { sdp } => peer.accept_offer(&sdp)?,
+                    SignalMessage::Offer { sdp } => peer.accept_offer(&sdp).await?,
                     _ => bail!("expected offer"),
                 };
 

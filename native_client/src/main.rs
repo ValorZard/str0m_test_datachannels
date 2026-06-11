@@ -3,10 +3,10 @@ use clap::Parser;
 use futures_util::StreamExt;
 use native_shared::{
     install_str0m_process,
-    peer::{Peer, RoleAction},
+    peer::{NativePeer, RoleAction},
     read_msg, validate_advertised_addr, write_msg,
 };
-use common::SignalMessage;
+use common::{Peer, SignalMessage};
 use std::net::{IpAddr, Ipv4Addr};
 use tokio::sync::oneshot;
 use tokio_tungstenite::connect_async;
@@ -33,7 +33,7 @@ async fn run_client(args: &Args) -> Result<()> {
     let advertised_addr = validate_advertised_addr(IpAddr::V4(Ipv4Addr::LOCALHOST), args.udp_port)
         .ok_or(anyhow!("Failed to generate address"))?;
 
-    let mut peer = Peer::new(advertised_addr).await?;
+    let mut peer = NativePeer::new(advertised_addr).await?;
     println!("client: UDP bound on {}", peer.bound_addr);
     println!("client: advertising ICE candidate {advertised_addr}",);
 
@@ -42,13 +42,13 @@ async fn run_client(args: &Args) -> Result<()> {
     println!("client: signaling connected to {server_addr}");
     println!("client: initial response from server {response:?}");
 
-    let offer_sdp = peer.create_offer("chat")?;
+    let offer_sdp = peer.create_offer("chat").await?;
     let (mut write_half, mut read_half) = stream.split();
     write_msg(&mut write_half, &SignalMessage::Offer { sdp: offer_sdp }).await?;
 
     let answer = read_msg(&mut read_half).await?;
     match answer {
-        SignalMessage::Answer { sdp } => peer.accept_answer(&sdp)?,
+        SignalMessage::Answer { sdp } => peer.accept_answer(&sdp).await?,
         _ => bail!("expected answer"),
     }
 

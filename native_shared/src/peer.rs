@@ -1,6 +1,7 @@
-use anyhow::{Result, anyhow};
+use anyhow::Result;
+use common::Peer;
 use std::{
-    net::{IpAddr, Ipv4Addr, SocketAddr, ToSocketAddrs},
+    net::{IpAddr, Ipv4Addr, SocketAddr},
     time::Instant,
 };
 use str0m::{
@@ -11,7 +12,7 @@ use str0m::{
 };
 use tokio::{
     net::UdpSocket,
-    sync::{mpsc, oneshot},
+    sync::oneshot,
 };
 
 pub enum RoleAction {
@@ -19,7 +20,7 @@ pub enum RoleAction {
     ClientSendAndWait { message: Vec<u8> },
 }
 
-pub struct Peer {
+pub struct NativePeer {
     pub rtc: Rtc,
     pub socket: UdpSocket,
     pub bound_addr: SocketAddr,      // wildcard or actual socket bind
@@ -27,36 +28,7 @@ pub struct Peer {
     pending_offer: Option<SdpPendingOffer>,
 }
 
-impl Peer {
-    // some of the ice candidates are mDNS, convert to IP to properly digest them
-    fn resolve_mdns_candidate(candidate: &str) -> Option<String> {
-        let mut parts: Vec<String> = candidate
-            .split_whitespace()
-            .map(std::string::ToString::to_string)
-            .collect();
-
-        if parts.len() < 6 {
-            return None;
-        }
-
-        let host = parts[4].clone();
-        let port = parts[5].clone();
-        if !host.ends_with(".local") {
-            return None;
-        }
-
-        let lookup = format!("{host}:{port}");
-        let resolved = lookup.to_socket_addrs().ok()?.next()?.ip();
-
-        parts[4] = resolved.to_string();
-
-        let converted_candidate = parts.join(" ");
-
-        println!("Converted mDNS to IP -> {converted_candidate}");
-
-        Some(converted_candidate)
-    }
-
+impl NativePeer {
     pub async fn new(advertised_addr: SocketAddr) -> Result<Self> {
         let bind_ip = IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0));
 
@@ -81,55 +53,6 @@ impl Peer {
         peer.rtc.add_local_candidate(candidate);
 
         Ok(peer)
-    }
-
-    pub fn create_offer(&mut self, channel_label: &str) -> Result<String> {
-        let mut api = self.rtc.sdp_api();
-        let _cid = api.add_channel(channel_label.into());
-        let (offer, pending) = api
-            .apply()
-            .ok_or_else(|| anyhow!("no SDP changes to apply"))?;
-        self.pending_offer = Some(pending);
-        Ok(offer.to_sdp_string())
-    }
-
-    pub fn accept_offer(&mut self, sdp_offer: &str) -> Result<String> {
-        let offer = SdpOffer::from_sdp_string(sdp_offer)?;
-        let answer = self.rtc.sdp_api().accept_offer(offer)?;
-        Ok(answer.to_sdp_string())
-    }
-
-    pub fn accept_answer(&mut self, sdp_answer: &str) -> Result<()> {
-        let pending = self
-            .pending_offer
-            .take()
-            .ok_or_else(|| anyhow!("no pending offer"))?;
-        let answer = SdpAnswer::from_sdp_string(sdp_answer)?;
-        self.rtc.sdp_api().accept_answer(pending, answer)?;
-        Ok(())
-    }
-
-    pub fn add_remote_ice_candidate(&mut self, candidate: String) -> Result<()> {
-        let candidate = candidate.trim().to_string();
-        if candidate.is_empty() {
-            // Browser emits empty candidate as end-of-candidates; nothing to add.
-            return Ok(());
-        }
-
-        println!("Incoming remote candidate {candidate}");
-
-        let normalized_candidate =
-            Self::resolve_mdns_candidate(&candidate).unwrap_or_else(|| candidate.clone());
-
-        match Candidate::from_sdp_string(&normalized_candidate) {
-            Ok(candidate) => {
-                self.rtc.add_remote_candidate(candidate);
-            }
-            Err(err) => {
-                eprintln!("ignoring unsupported remote ICE candidate: {candidate} ({err})");
-            }
-        }
-        Ok(())
     }
 
     pub async fn run(
@@ -262,5 +185,54 @@ impl Peer {
                 }
             }
         }
+    }
+}
+
+
+impl Peer for NativePeer {
+    type Error = std::io::Error;
+
+    async fn create_offer(
+        &mut self,
+        channel_label: &str,
+    ) -> std::result::Result<String, std::io::Error> {
+        let mut api = self.rtc.sdp_api();
+        let _cid = api.add_channel(channel_label.into());
+        let (offer, pending) = api
+            .apply()
+            .ok_or_else(|| std::io::Error::other("no SDP changes to apply"))?;
+        self.pending_offer = Some(pending);
+        Ok(offer.to_sdp_string())
+    }
+
+    async fn accept_offer(
+        &mut self,
+        sdp_offer: &str,
+    ) -> std::result::Result<String, std::io::Error> {
+        let offer = SdpOffer::from_sdp_string(sdp_offer)
+            .map_err(|e| std::io::Error::other(e.to_string()))?;
+        let answer = self
+            .rtc
+            .sdp_api()
+            .accept_offer(offer)
+            .map_err(|e| std::io::Error::other(e.to_string()))?;
+        Ok(answer.to_sdp_string())
+    }
+
+    async fn accept_answer(
+        &mut self,
+        sdp_answer: &str,
+    ) -> std::result::Result<(), std::io::Error> {
+        let pending = self
+            .pending_offer
+            .take()
+            .ok_or_else(|| std::io::Error::other("no pending offer"))?;
+        let answer = SdpAnswer::from_sdp_string(sdp_answer)
+            .map_err(|e| std::io::Error::other(e.to_string()))?;
+        self.rtc
+            .sdp_api()
+            .accept_answer(pending, answer)
+            .map_err(|e| std::io::Error::other(e.to_string()))?;
+        Ok(())
     }
 }
