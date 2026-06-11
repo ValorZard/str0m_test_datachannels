@@ -1,9 +1,9 @@
 use anyhow::Result;
+use common::{Peer, SignalMessage};
 use futures_util::{SinkExt, StreamExt};
 use gloo_timers::future::TimeoutFuture;
 use js_sys::{Array, Uint8Array};
 use serde::{Deserialize, Serialize};
-use common::{Peer, SignalMessage};
 use std::cell::OnceCell;
 use std::{cell::RefCell, rc::Rc};
 use wasm_bindgen::JsCast;
@@ -157,8 +157,7 @@ impl Peer for WasmPeer {
         let offer_val = JsFuture::from(self.inner.pc.create_offer()).await?;
         let offer: RtcSessionDescriptionInit = offer_val.unchecked_into();
 
-        JsFuture::from(self.inner.pc.set_local_description(&offer))
-            .await?;
+        JsFuture::from(self.inner.pc.set_local_description(&offer)).await?;
 
         // since we are connected to a public IP, we don't need to actually send ICE candidates,
         // but we do it to make firefox happy

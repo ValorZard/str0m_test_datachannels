@@ -2,13 +2,13 @@ use std::net::IpAddr;
 
 use anyhow::{Result, anyhow, bail};
 use clap::Parser;
+use common::{Peer, SignalMessage};
 use futures_util::StreamExt;
 use native_shared::{
     install_str0m_process,
     peer::{NativePeer, RoleAction},
     read_msg, validate_advertised_addr, write_msg,
 };
-use common::{Peer, SignalMessage};
 
 use tokio::{net::TcpListener, sync::oneshot, task::JoinSet};
 

@@ -10,10 +10,7 @@ use str0m::{
     channel::ChannelId,
     net::{Protocol, Receive},
 };
-use tokio::{
-    net::UdpSocket,
-    sync::oneshot,
-};
+use tokio::{net::UdpSocket, sync::oneshot};
 
 pub enum RoleAction {
     EchoServer,
@@ -188,7 +185,6 @@ impl NativePeer {
     }
 }
 
-
 impl Peer for NativePeer {
     type Error = std::io::Error;
 
@@ -219,10 +215,7 @@ impl Peer for NativePeer {
         Ok(answer.to_sdp_string())
     }
 
-    async fn accept_answer(
-        &mut self,
-        sdp_answer: &str,
-    ) -> std::result::Result<(), std::io::Error> {
+    async fn accept_answer(&mut self, sdp_answer: &str) -> std::result::Result<(), std::io::Error> {
         let pending = self
             .pending_offer
             .take()
