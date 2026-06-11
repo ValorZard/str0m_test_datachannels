@@ -1,7 +1,5 @@
 # datachannel socket
 
-# WARNING! If you are reading this on crates.io, I haven't finished turning this into a proper library yet. Check back later
-
 Connect to a [str0m](https://github.com/algesten/str0m) webrtc peer through either a native client (using str0m itself) or a WASM client using a websocket signaling server.
 
 Native str0m clients can bypass using STUN/TURN by just sending its own IP address directly.
@@ -54,12 +52,12 @@ trunk serve --example wasm_client
 On the server machine:
 
 ```bash
-cargo run -p server -- --advertise-ip YOUR_PUBLIC_SERVER_IP
+cargo run --example native_server -- --advertise-ip YOUR_PUBLIC_SERVER_IP
 ```
 On the client machine:
 
 ```bash
-cargo run -p client -- --server-addr YOUR_PUBLIC_SERVER_ADDR
+cargo run --example native_client -- --server-addr YOUR_SIGNALING_SERVER_ADDR
 ```
 
 Note that the client peer doesn't need to advertise it's own IP address. This is because because the server is already advertising it's public IP, we don't actually need to put in the work to find our own IP. So, as long as we put in a somewhat valid IP address, the server peer will be able to connect to the client peer.
