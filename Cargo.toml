@@ -1,6 +1,6 @@
 [package]
 name = "datachannel-socket"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Srayan Jana <srayan.jana@outlook.com>"]
 description = "Cross-Platform WebRTC Datachannels for Client-Server apps."
 license = "MIT OR Apache-2.0"
