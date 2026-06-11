@@ -5,8 +5,7 @@ use clap::Parser;
 use common::{Peer, PeerFactory, SignalMessage};
 use futures_util::StreamExt;
 use native_shared::{
-    peer::{NativePeer, NativePeerFactory, RoleAction},
-    read_msg, validate_advertised_addr, write_msg,
+    NativeClientPeerFactory, NativePeer, NativeServerPeerFactory, RoleAction, read_msg, validate_advertised_addr, write_msg
 };
 
 use tokio::{net::TcpListener, sync::oneshot, task::JoinSet};
@@ -28,70 +27,20 @@ struct Args {
 
 async fn run_server(args: Args) -> Result<()> {
     // HAS TO BE RUN BEFORE WEBRTC STUFF RUNS
-    let factory = NativePeerFactory::new();
     let listener = TcpListener::bind((args.bind_ip, args.signal_port)).await?;
     println!("server: signaling on {}:{}", args.bind_ip, args.signal_port);
+    let factory = NativeServerPeerFactory::new(listener);
 
     let mut join_set = JoinSet::new();
-    while let Ok((raw_stream, addr)) = listener.accept().await {
-        // this is only really necessary if you are testing server and client on same machine
-        let advertise_addr = validate_advertised_addr(args.advertise_ip, args.udp_port)
-            .ok_or(anyhow!("Failed to generate address"))?;
-        println!("Advertising server on '{advertise_addr}'");
-        println!(
-            "Note that if you are running this over the internet proper, the ip of the remote machine you are running this one has to be passed through to the server process itself as the advertise_ip."
-        );
-        if addr.ip().is_loopback() {
-            eprintln!(
-                "server: info: signaling peer is loopback ({addr}), advertising non-loopback ICE IP {advertise_addr} for browser compatibility"
-            );
-        }
-
-        let mut peer = factory.create_peer(advertise_addr).await?;
-        println!("server: UDP bound on {}", peer.bound_addr);
-        println!("server: advertising ICE candidate {}", peer.advertised_addr);
-
-        join_set.spawn(async move {
-            let result: Result<()> = async {
-                let ws_stream = match tokio_tungstenite::accept_async(raw_stream).await {
-                    Ok(ws) => ws,
-                    Err(err) => {
-                        eprintln!("WebSocket handshake failed for {}: {:?}", addr, err);
-                        return Ok(());
-                    }
-                };
-                println!("server: signaling connected from {addr}");
-
-                let (mut write_stream, mut read_stream) = ws_stream.split();
-
-                let offer = read_msg(&mut read_stream).await?;
-                let answer_sdp = match offer {
-                    SignalMessage::Offer { sdp } => peer.accept_offer(&sdp).await?,
-                    _ => bail!("expected offer"),
-                };
-
-                write_msg(
-                    &mut write_stream,
-                    &SignalMessage::Answer { sdp: answer_sdp },
-                )
-                .await?;
-
-                drop(read_stream);
-                drop(write_stream);
-
-                println!("Closing stream, don't need it anymore, client should be connected.");
-
-                let (tx, _rx) = oneshot::channel::<Vec<u8>>();
-                peer.run("server", RoleAction::EchoServer, tx).await?;
-                Ok(())
+    while let Ok(mut peer) = factory.create_peer((args.advertise_ip, args.udp_port)).await {
+        join_set.spawn(async move { 
+            let (tx, _rx) = oneshot::channel::<Vec<u8>>();
+            if let Err(e) = peer.run("server", RoleAction::EchoServer, tx).await {
+                println!("Peer failed with error {e}");
             }
-            .await;
-
-            if let Err(err) = result {
-                eprintln!("server: session {addr} ended with error: {err:#}");
-            }
-        });
+        });  
     }
+        
 
     Ok(())
 }

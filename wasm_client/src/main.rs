@@ -332,7 +332,9 @@ impl PeerFactory for WasmPeerFactory {
 
     type CreateArgs = ();
 
-    fn new() -> Self {
+    type FactoryArgs = ();
+
+    fn new(_: Self::FactoryArgs) -> Self {
         Self {}
     }
 
@@ -343,7 +345,7 @@ impl PeerFactory for WasmPeerFactory {
 
 fn connect_to_server(server_address: String) {
     spawn_local(async move {
-        let factory = WasmPeerFactory::new();
+        let factory = WasmPeerFactory::new(());
         let mut wasm_peer = factory.create_peer(()).await.expect("should work");
 
         let (ws, wsio) = match WsMeta::connect(server_address.clone(), None).await {

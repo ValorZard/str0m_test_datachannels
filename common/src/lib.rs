@@ -38,9 +38,10 @@ pub trait Peer {
 pub trait PeerFactory {
     type Error;
     type PeerType: Peer<Error = Self::Error>;
+    type FactoryArgs;
     type CreateArgs;
 
-    fn new() -> Self;
+    fn new(args: Self::FactoryArgs) -> Self;
     fn create_peer(
         &self,
         args: Self::CreateArgs,
