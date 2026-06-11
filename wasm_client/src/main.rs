@@ -330,7 +330,8 @@ impl PeerFactory for WasmPeerFactory {
 
     type PeerType = WasmPeer;
 
-    type CreateArgs = ();
+    // should be address to the signaling server
+    type CreateArgs = String;
 
     type FactoryArgs = ();
 
@@ -338,21 +339,13 @@ impl PeerFactory for WasmPeerFactory {
         Self {}
     }
 
-    async fn create_peer(&self, _: Self::CreateArgs) -> Result<WasmPeer, Self::Error> {
-        WasmPeer::new()
-    }
-}
-
-fn connect_to_server(server_address: String) {
-    spawn_local(async move {
-        let factory = WasmPeerFactory::new(());
-        let mut wasm_peer = factory.create_peer(()).await.expect("should work");
+    async fn create_peer(&self, server_address: Self::CreateArgs) -> Result<WasmPeer, Self::Error> {
+        let mut wasm_peer = WasmPeer::new()?;
 
         let (ws, wsio) = match WsMeta::connect(server_address.clone(), None).await {
             Ok(parts) => parts,
             Err(e) => {
-                log!("WebSocket connect failed for {}: {:?}", server_address, e);
-                return;
+                return Err(format!("WebSocket connect failed for {}: {:?}", server_address, e).into());
             }
         };
 
@@ -373,11 +366,19 @@ fn connect_to_server(server_address: String) {
                 break;
             }
         }
-
-        drop(send_stream);
-        drop(recv_stream);
         let _ = ws.close();
         log!("we can close the websocket now, webrtc connection should be bootstrapped");
+        Ok(wasm_peer)
+    }
+}
+
+fn connect_to_server(server_address: String) {
+    spawn_local(async move {
+        let factory = WasmPeerFactory::new(());
+        let wasm_peer = factory
+            .create_peer(server_address)
+            .await
+            .expect("should work");
 
         // send until its open
         loop {
