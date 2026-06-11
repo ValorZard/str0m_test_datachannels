@@ -1,24 +1,29 @@
 # datachannel socket
 
-Connect to a [str0m](https://github.com/algesten/str0m) webrtc "server" peer through either a native client (using str0m itself) or a WASM client using a websocket signaling server.
+Connect to a [str0m](https://github.com/algesten/str0m) WebRTC "server" peer through either a native client (using str0m itself) or a WASM client.
 
-Native str0m clients can bypass using STUN/TURN by just sending its own IP address directly.
+This is done by "bootstrapping" the WebRTC connection with a WebSocket connection to a signaling server and then dropping the connection once the WebRTC session has started.
 
-The reason is that the entire point of STUN/TURN is for clients to discover their own public IP address and port number. But, that's only needed in the browser for security reasons. If we are launching from our own machine we can just ... look up our own IP ourselves.
+This is specifically intended for the usecase of people wanting access to UDP-style performance with WebRTC datachannels for a client-server application or game that can compile to both WASM or native. 
 
-The WASM Client is stuck having to use STUN/TURN/ICE trickling, though, and it's a little annoying if you want Trickle ICE. Just waiting for all ICE candidates to show up before connecting works, but adds extra startup time.
+**If your interested in WebRTC for media streaming/telephony, please use something else.**
+
+**If you only care about compiling something for native targets, please use something else.**
+
+This is considered an alternative to [WebTransport](https://www.w3.org/TR/webtransport/), except unlike WebTransport this can work in all browsers today.
+
+Native str0m peers hosted on a public server can bypass using a STUN server for external address discovery by just sending its own IP address directly.
+
+The reason is that the entire point of STUN is for clients to discover their own public IP address and port number. But, that's only needed in the browser for security reasons. If we are launching from our own machine we can just ... look up our own IP ourselves.
+
+We should NEVER need to use a TURN server for a relay. If we have to resort to using a TURN for a relay, that defeats the entire point of this library, since we want to have as little latency as possible compared to existing options like WebSockets.
+
+We do still use ICE for setting up the connection and connectivity checks, but we never need to connect to any other external servers other than the signaling "bootstrap" server.
+
 
 # Caveats
 
 **Right now this can only work as an echo server. I'm releasing this library now to make sure this can work on different people's computer in real world situations before continuing development.**
-
-To be very clear, this is ONLY interested in turning WebRTC to give UDP-level performance in the browser using a client-server archiecture that works with all the major browsers.
-
-If you want to use webrtc to make a peer to peer game, checkout [matchbox](https://github.com/johanhelsing/matchbox).
-
-If you don't care about Firefox or Safari, and are okay with only having something work on Chrome, use WebTransport. I'm fond of this library in particular: https://github.com/MOZGIII/xwt
-
-If you don't care about the browser but are interested in WebRTC for the P2P stuff, might I suggest you use [iroh](https://www.iroh.computer/) instead?
 
 # How to run
 ## Localhost test
@@ -79,3 +84,12 @@ You will need to have installed [cross](https://github.com/cross-rs/cross).
 
 Then you can just do:
 ``cross build --target x86_64-unknown-linux-gnu # can do release version by adding --release``
+
+
+# Alternatives
+
+If you want to use WebRTC to make a peer to peer game, checkout [matchbox](https://github.com/johanhelsing/matchbox).
+
+If you don't care about Firefox or Safari, and are okay with having something only work on Chrome, use WebTransport. I'm fond of [this library in particular](https://github.com/MOZGIII/xwt), but you can also use [web-transport](https://github.com/moq-dev/web-transport).
+
+If you don't care about the browser but are interested in WebRTC for the P2P stuff, might I suggest you use [iroh](https://www.iroh.computer/) instead? I find the API VERY easy to use.
