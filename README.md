@@ -1,4 +1,7 @@
-# str0m datachannel test
+# datachannel socket
+
+# WARNING! If you are reading this on crates.io, I haven't finished turning this into a proper library yet. Check back later
+
 Connect to a [str0m](https://github.com/algesten/str0m) webrtc peer through either a native client (using str0m itself) or a WASM client using a websocket signaling server.
 
 Native str0m clients can bypass using STUN/TURN by just sending its own IP address directly.
