@@ -318,14 +318,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "common"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "console_error_panic_hook"
 version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -412,15 +404,55 @@ version = "0.2.0"
 dependencies = [
  "anyhow",
  "clap",
- "common",
  "console_error_panic_hook",
+ "datachannel_socket_common",
+ "datachannel_socket_native_peer",
+ "datachannel_socket_wasm_peer",
  "gloo-timers",
- "native_peer",
  "tokio",
  "wasm-bindgen",
  "wasm-bindgen-futures",
- "wasm_peer",
  "web-sys",
+]
+
+[[package]]
+name = "datachannel_socket_common"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "datachannel_socket_native_peer"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "datachannel_socket_common",
+ "futures-util",
+ "serde",
+ "serde_json",
+ "str0m",
+ "tokio",
+ "tokio-tungstenite",
+]
+
+[[package]]
+name = "datachannel_socket_wasm_peer"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "console_error_panic_hook",
+ "datachannel_socket_common",
+ "futures-util",
+ "gloo-timers",
+ "js-sys",
+ "serde",
+ "serde_json",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+ "ws_stream_wasm",
 ]
 
 [[package]]
@@ -841,20 +873,6 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "tempfile",
-]
-
-[[package]]
-name = "native_peer"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "common",
- "futures-util",
- "serde",
- "serde_json",
- "str0m",
- "tokio",
- "tokio-tungstenite",
 ]
 
 [[package]]
@@ -1724,24 +1742,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7acbf7616c27b194bbb550bf77ed0c2c3e5b7fd1260a93082b95fb7f47959b92"
 dependencies = [
  "unicode-ident",
-]
-
-[[package]]
-name = "wasm_peer"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "common",
- "console_error_panic_hook",
- "futures-util",
- "gloo-timers",
- "js-sys",
- "serde",
- "serde_json",
- "wasm-bindgen",
- "wasm-bindgen-futures",
- "web-sys",
- "ws_stream_wasm",
 ]
 
 [[package]]

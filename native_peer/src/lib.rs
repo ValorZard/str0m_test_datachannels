@@ -1,5 +1,5 @@
 use anyhow::{Result, anyhow};
-use common::{Peer, PeerFactory, SignalMessage};
+use datachannel_socket_common::{Peer, PeerFactory, SignalMessage};
 use futures_util::{
     SinkExt, StreamExt,
     stream::{SplitSink, SplitStream},

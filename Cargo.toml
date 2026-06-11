@@ -17,9 +17,9 @@ exclude = ["examples/*"]
 
 [workspace.dependencies]
 # Internal crates
-native_peer = {path = "./native_peer/"}
-common = {path = "./common/"}
-wasm_peer = {path = "./wasm_peer/"}
+datachannel_socket_native_peer = {path = "./native_peer/"}
+datachannel_socket_common = {path = "./common/"}
+datachannel_socket_wasm_peer = {path = "./wasm_peer/"}
 
 # dependencies
 anyhow = "1"
@@ -40,13 +40,13 @@ ws_stream_wasm = "0.7.5"
 gloo-timers = { version = "0.4", features = ["futures"] }
 
 [dependencies]
-common = {workspace = true}
+datachannel_socket_common = {workspace = true}
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-native_peer = { workspace = true }
+datachannel_socket_native_peer = { workspace = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-wasm_peer = { workspace = true }
+datachannel_socket_wasm_peer = { workspace = true }
 
 [dev-dependencies]
 anyhow = {workspace = true}

@@ -1,7 +1,7 @@
-pub use common;
+pub use datachannel_socket_common as common;
 
 #[cfg(not(target_arch = "wasm32"))]
-pub use native_peer;
+pub use datachannel_socket_native_peer as native_peer;
 
 #[cfg(target_arch = "wasm32")]
-pub use wasm_peer;
+pub use datachannel_socket_wasm_peer as wasm_peer;

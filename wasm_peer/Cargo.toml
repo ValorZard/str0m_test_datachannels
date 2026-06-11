@@ -1,10 +1,10 @@
 [package]
-name = "wasm_peer"
+name = "datachannel_socket_wasm_peer"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-common = {path = "../common/"}
+datachannel_socket_common = {path = "../common/"}
 anyhow = {workspace = true}
 console_error_panic_hook = {workspace = true}
 js-sys = {workspace = true}

@@ -1,5 +1,5 @@
 use anyhow::Result;
-use common::{Peer, PeerFactory, SignalMessage};
+use datachannel_socket_common::{Peer, PeerFactory, SignalMessage};
 use futures_util::{SinkExt, StreamExt};
 use gloo_timers::future::TimeoutFuture;
 use js_sys::{Array, Uint8Array};
