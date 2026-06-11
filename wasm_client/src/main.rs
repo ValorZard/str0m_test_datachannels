@@ -11,10 +11,10 @@ use wasm_bindgen::closure::Closure;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::{JsFuture, spawn_local};
 use web_sys::{
-    Event, HtmlElement, HtmlInputElement, MessageEvent,
-    RtcConfiguration, RtcDataChannel, RtcDataChannelEvent, RtcIceCandidate, RtcIceCandidateInit,
-    RtcIceConnectionState, RtcIceGatheringState, RtcIceServer, RtcPeerConnection,
-    RtcPeerConnectionIceEvent, RtcSdpType, RtcSessionDescriptionInit,
+    Event, HtmlElement, HtmlInputElement, MessageEvent, RtcConfiguration, RtcDataChannel,
+    RtcDataChannelEvent, RtcIceCandidate, RtcIceCandidateInit, RtcIceConnectionState,
+    RtcIceGatheringState, RtcIceServer, RtcPeerConnection, RtcPeerConnectionIceEvent, RtcSdpType,
+    RtcSessionDescriptionInit,
 };
 use ws_stream_wasm::{WsMessage, WsMeta};
 
@@ -318,8 +318,6 @@ pub fn drain_local_ice_candidates(peer: Rc<WasmPeer>) -> Vec<IceCandidateMessage
         .drain(..)
         .collect()
 }
-// TODO: Make this not hardcoded at some point
-const SERVER_ADDRESS: &str = "ws://127.0.0.1:7000";
 
 fn connect_to_server(server_address: String) {
     spawn_local(async move {
@@ -384,12 +382,6 @@ fn main() {
     let server_searchbox = document
         .get_element_by_id("server-searchbox")
         .expect("should be here");
-
-    // set default address here
-    {
-        let server_searchbox: &HtmlInputElement = server_searchbox.dyn_ref().unwrap();
-        server_searchbox.set_value(SERVER_ADDRESS);
-    }
 
     let a = Closure::<dyn FnMut()>::new(move || {
         let server_searchbox: &HtmlInputElement = server_searchbox.dyn_ref().unwrap();
