@@ -351,8 +351,10 @@ fn connect_to_server(server_address: String) {
             }
         }
 
-        // we can close the websocket now, webrtc connection is bootstrapped
+        drop(send_stream);
+        drop(recv_stream);
         let _ = ws.close();
+        log!("we can close the websocket now, webrtc connection should be bootstrapped");
 
         // send until its open
         loop {

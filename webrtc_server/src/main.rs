@@ -77,7 +77,10 @@ async fn run_server(args: Args) -> Result<()> {
                 )
                 .await?;
 
-                let (ice_sender, ice_receiver) = tokio::sync::mpsc::unbounded_channel::<String>();
+                drop(read_stream);
+                drop(write_stream);
+
+                println!("Closing stream, don't need it anymore, client should be connected.");
 
                 let (tx, _rx) = oneshot::channel::<Vec<u8>>();
                 peer.run("server", RoleAction::EchoServer, tx).await?;

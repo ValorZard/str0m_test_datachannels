@@ -52,6 +52,11 @@ async fn run_client(args: &Args) -> Result<()> {
         _ => bail!("expected answer"),
     }
 
+    drop(read_half);
+    drop(write_half);
+
+    println!("We're connected, so no need for websocket connection");
+
     let (tx, rx) = oneshot::channel::<Vec<u8>>();
     let msg = args.message.as_bytes().to_vec();
 
