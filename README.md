@@ -1,7 +1,5 @@
 # datachannel socket
 
-# WARNING! If you are reading this on crates.io, I haven't finished turning this into a proper library yet. Check back later
-
 Connect to a [str0m](https://github.com/algesten/str0m) webrtc peer through either a native client (using str0m itself) or a WASM client using a websocket signaling server.
 
 Native str0m clients can bypass using STUN/TURN by just sending its own IP address directly.
@@ -16,19 +14,20 @@ The WASM Client is stuck having to use STUN/TURN/ICE trickling, though, and it's
 ### Server:
 
 ```bash
-cargo run -p webrtc_server
+cargo run --example native_server
 ```
 
 Note: running the server locally will require the server to generate a non-loopback address for certain targets to connect to it properly.
 
 for example:
 ```bash
-PS C:\github\str0m_test_datachannels> cargo run -p webrtc_server -- --bind-ip 0.0.0.0 --signal-port 7000 --udp-port 5000
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.22s
-     Running `target\debug\webrtc_server.exe --bind-ip 0.0.0.0 --signal-port 7000 --udp-port 5000`
+PS C:\github\str0m_test_datachannels> cargo run --example native_server                                
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.63s
+     Running `target\debug\examples\native_server.exe`
 server: signaling on 0.0.0.0:7000
-Advertising server on '10.1.2.145'
+Advertising server on '192.168.68.51:59471'
 Note that if you are running this over the internet proper, the ip of the remote machine you are running this one has to be passed through to the server process itself as the advertise_ip.
+server: info: signaling peer is loopback (127.0.0.1:53301), advertising non-loopback ICE IP 192.168.68.51:59471 for browser compatibility
 ```
 
 This is because firefox doesn't like it when you connect to WebRTC using a loopback address.
@@ -36,7 +35,7 @@ This is because firefox doesn't like it when you connect to WebRTC using a loopb
 ### Native Client:
 
 ```bash
-cargo run -p client -- --server-addr "ws://127.0.0.1:7000"
+cargo run --example native_client  -- --server-addr "ws://127.0.0.1:7000"
 ```
 
 ### WASM Client:
@@ -44,8 +43,7 @@ You will need to have installed [trunk](https://github.com/trunk-rs/trunk).
 
 Then, you can just do:
 ```bash
-cd wasm_client
-trunk serve
+trunk serve --example wasm_client
 ```
 
 
@@ -54,12 +52,12 @@ trunk serve
 On the server machine:
 
 ```bash
-cargo run -p server -- --advertise-ip YOUR_PUBLIC_SERVER_IP
+cargo run --example native_server -- --advertise-ip YOUR_PUBLIC_SERVER_IP
 ```
 On the client machine:
 
 ```bash
-cargo run -p client -- --server-addr YOUR_PUBLIC_SERVER_ADDR
+cargo run --example native_client -- --server-addr YOUR_SIGNALING_SERVER_ADDR
 ```
 
 Note that the client peer doesn't need to advertise it's own IP address. This is because because the server is already advertising it's public IP, we don't actually need to put in the work to find our own IP. So, as long as we put in a somewhat valid IP address, the server peer will be able to connect to the client peer.

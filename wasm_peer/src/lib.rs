@@ -1,9 +1,9 @@
 use anyhow::Result;
+use common::{Peer, PeerFactory, SignalMessage};
 use futures_util::{SinkExt, StreamExt};
 use gloo_timers::future::TimeoutFuture;
 use js_sys::{Array, Uint8Array};
 use serde::{Deserialize, Serialize};
-use signaling_shared::SignalMessage;
 use std::cell::OnceCell;
 use std::{cell::RefCell, rc::Rc};
 use wasm_bindgen::JsCast;
@@ -19,7 +19,7 @@ use web_sys::{
 use ws_stream_wasm::{WsMessage, WsMeta};
 
 #[macro_export]
-macro_rules! log {
+macro_rules! peer_log {
     ($($arg:tt)*) => {
         web_sys::console::log_1(&format!($($arg)*).into());
     };
@@ -74,60 +74,6 @@ impl WasmPeer {
         install_peer_handlers(&inner)?;
 
         Ok(WasmPeer { inner })
-    }
-
-    pub async fn create_offer(&self) -> Option<String> {
-        // first create an internal data channel to initalize the peer connection
-        let dc = self.inner.pc.create_data_channel("test");
-        install_data_channel_handlers(&self.inner, &dc).ok()?;
-        self.inner.data_channel.replace(Some(dc));
-
-        let offer_val = JsFuture::from(self.inner.pc.create_offer()).await.ok()?;
-        let offer: RtcSessionDescriptionInit = offer_val.unchecked_into();
-
-        JsFuture::from(self.inner.pc.set_local_description(&offer))
-            .await
-            .ok()?;
-
-        // since we are connected to a public IP, we don't need to actually send ICE candidates,
-        // but we do it to make firefox happy
-        loop {
-            log!("{:?}", self.inner.pc.ice_gathering_state());
-            if self.inner.pc.ice_gathering_state() == web_sys::RtcIceGatheringState::Complete {
-                break;
-            }
-            TimeoutFuture::new(50).await;
-        }
-
-        let local = self.inner.pc.local_description()?;
-        log!("local description after gathering: {:?}", local.sdp());
-        Some(local.sdp())
-    }
-
-    pub async fn accept_offer(&self, sdp_offer: String) -> Option<String> {
-        let remote = RtcSessionDescriptionInit::new(RtcSdpType::Offer);
-        remote.set_sdp(&sdp_offer);
-
-        JsFuture::from(self.inner.pc.set_remote_description(&remote))
-            .await
-            .unwrap();
-
-        let answer_val = JsFuture::from(self.inner.pc.create_answer()).await.unwrap();
-        let answer: RtcSessionDescriptionInit = answer_val.dyn_into().unwrap();
-
-        JsFuture::from(self.inner.pc.set_local_description(&answer))
-            .await
-            .unwrap();
-
-        answer.get_sdp()
-    }
-
-    pub async fn accept_answer(&self, sdp_answer: String) -> Result<(), JsValue> {
-        let remote = RtcSessionDescriptionInit::new(RtcSdpType::Answer);
-        remote.set_sdp(&sdp_answer);
-
-        JsFuture::from(self.inner.pc.set_remote_description(&remote)).await?;
-        Ok(())
     }
 
     pub async fn add_ice_candidate(&self, candidate: String) -> Result<(), JsValue> {
@@ -199,6 +145,64 @@ impl WasmPeer {
     }
 }
 
+impl Peer for WasmPeer {
+    type Error = JsValue;
+
+    async fn create_offer(&mut self, channel_label: &str) -> Result<String, JsValue> {
+        // first create an internal data channel to initalize the peer connection
+        let dc = self.inner.pc.create_data_channel(channel_label);
+        install_data_channel_handlers(&self.inner, &dc)?;
+        self.inner.data_channel.replace(Some(dc));
+
+        let offer_val = JsFuture::from(self.inner.pc.create_offer()).await?;
+        let offer: RtcSessionDescriptionInit = offer_val.unchecked_into();
+
+        JsFuture::from(self.inner.pc.set_local_description(&offer)).await?;
+
+        // since we are connected to a public IP, we don't need to actually send ICE candidates,
+        // but we do it to make firefox happy
+        loop {
+            peer_log!("{:?}", self.inner.pc.ice_gathering_state());
+            if self.inner.pc.ice_gathering_state() == web_sys::RtcIceGatheringState::Complete {
+                break;
+            }
+            TimeoutFuture::new(50).await;
+        }
+
+        let local = self
+            .inner
+            .pc
+            .local_description()
+            .ok_or_else(|| JsValue::from_str("missing local description"))?;
+        peer_log!("local description after gathering: {:?}", local.sdp());
+        Ok(local.sdp())
+    }
+
+    async fn accept_offer(&mut self, sdp_offer: &str) -> Result<String, JsValue> {
+        let remote = RtcSessionDescriptionInit::new(RtcSdpType::Offer);
+        remote.set_sdp(sdp_offer);
+
+        JsFuture::from(self.inner.pc.set_remote_description(&remote)).await?;
+
+        let answer_val = JsFuture::from(self.inner.pc.create_answer()).await?;
+        let answer: RtcSessionDescriptionInit = answer_val.unchecked_into();
+
+        JsFuture::from(self.inner.pc.set_local_description(&answer)).await?;
+
+        answer
+            .get_sdp()
+            .ok_or_else(|| JsValue::from_str("missing answer SDP"))
+    }
+
+    async fn accept_answer(&mut self, sdp_answer: &str) -> Result<(), JsValue> {
+        let remote = RtcSessionDescriptionInit::new(RtcSdpType::Answer);
+        remote.set_sdp(sdp_answer);
+
+        JsFuture::from(self.inner.pc.set_remote_description(&remote)).await?;
+        Ok(())
+    }
+}
+
 fn make_rtc_config() -> RtcConfiguration {
     let stun = RtcIceServer::new();
     stun.set_urls(&JsValue::from_str("stun:stun.l.google.com:19302"));
@@ -220,7 +224,7 @@ fn install_peer_handlers(inner: &Rc<Inner>) -> Result<(), JsValue> {
                 return;
             }
 
-            log!("local candidate: {:?}", candidate_str);
+            peer_log!("local candidate: {:?}", candidate_str);
             // since we are just doing datachannels, we don't care about media, so no need for mid or mline
             inner_for_ice
                 .pending_local_ice
@@ -243,7 +247,7 @@ fn install_peer_handlers(inner: &Rc<Inner>) -> Result<(), JsValue> {
     let inner_for_state = Rc::clone(inner);
     let on_ice_state_change = Closure::wrap(Box::new(move |_e: Event| {
         let state = inner_for_state.pc.ice_connection_state();
-        log!("ICE connection state: {:?}", state);
+        peer_log!("ICE connection state: {:?}", state);
     }) as Box<dyn FnMut(_)>);
     inner
         .pc
@@ -319,20 +323,36 @@ pub fn drain_local_ice_candidates(peer: Rc<WasmPeer>) -> Vec<IceCandidateMessage
         .collect()
 }
 
-fn connect_to_server(server_address: String) {
-    spawn_local(async move {
-        let wasm_peer = Rc::new(WasmPeer::new().expect("should work"));
+pub struct WasmPeerFactory {}
+
+impl PeerFactory for WasmPeerFactory {
+    type Error = JsValue;
+
+    type PeerType = WasmPeer;
+
+    // should be address to the signaling server
+    type CreateArgs = String;
+
+    type FactoryArgs = ();
+
+    fn new(_: Self::FactoryArgs) -> Self {
+        Self {}
+    }
+
+    async fn create_peer(&self, server_address: Self::CreateArgs) -> Result<WasmPeer, Self::Error> {
+        let mut wasm_peer = WasmPeer::new()?;
 
         let (ws, wsio) = match WsMeta::connect(server_address.clone(), None).await {
             Ok(parts) => parts,
             Err(e) => {
-                log!("WebSocket connect failed for {}: {:?}", server_address, e);
-                return;
+                return Err(
+                    format!("WebSocket connect failed for {}: {:?}", server_address, e).into(),
+                );
             }
         };
 
         let (mut send_stream, mut recv_stream) = wsio.split();
-        let offer_sdp = wasm_peer.create_offer().await.unwrap();
+        let offer_sdp = wasm_peer.create_offer("chat").await.unwrap();
         let signaling_message = SignalMessage::Offer { sdp: offer_sdp };
         let signaling_message = serde_json::to_string(&signaling_message).unwrap();
         let send_message = WsMessage::Text(signaling_message);
@@ -343,55 +363,13 @@ fn connect_to_server(server_address: String) {
             if let Some(WsMessage::Text(answer_string)) = recv_stream.next().await {
                 let parsed_answer = serde_json::from_str::<SignalMessage>(&answer_string).unwrap();
                 let answer_sdp = parsed_answer.sdp();
-                log!("received answer sdp: {:?}", answer_sdp);
-                wasm_peer.accept_answer(answer_sdp.clone()).await.unwrap();
+                peer_log!("received answer sdp: {:?}", answer_sdp);
+                wasm_peer.accept_answer(answer_sdp.as_str()).await.unwrap();
                 break;
             }
         }
-
-        drop(send_stream);
-        drop(recv_stream);
         let _ = ws.close();
-        log!("we can close the websocket now, webrtc connection should be bootstrapped");
-
-        // send until its open
-        loop {
-            if let Ok(_) = wasm_peer.send_text("Hello from WASM!".to_string()) {
-                log!("Success");
-                break;
-            }
-            TimeoutFuture::new(50).await;
-        }
-
-        // read messages coming in
-        loop {
-            if let Ok(message) = wasm_peer.take_received_messages() {
-                log!("Message from data channel: {message}");
-            }
-            TimeoutFuture::new(50).await;
-        }
-    });
-}
-fn main() {
-    console_error_panic_hook::set_once();
-
-    let window = web_sys::window().expect("no global `window` exists");
-    let document = window.document().expect("should have a document on window");
-    let _body = document.body().expect("document should have a body");
-
-    let server_searchbox = document
-        .get_element_by_id("server-searchbox")
-        .expect("should be here");
-
-    let a = Closure::<dyn FnMut()>::new(move || {
-        let server_searchbox: &HtmlInputElement = server_searchbox.dyn_ref().unwrap();
-        connect_to_server(server_searchbox.value());
-    });
-    document
-        .get_element_by_id("server-button")
-        .expect("should be here")
-        .dyn_ref::<HtmlElement>()
-        .unwrap()
-        .set_onclick(Some(a.as_ref().unchecked_ref()));
-    a.forget();
+        peer_log!("we can close the websocket now, webrtc connection should be bootstrapped");
+        Ok(wasm_peer)
+    }
 }

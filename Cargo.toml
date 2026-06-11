@@ -11,15 +11,51 @@ categories = ["web-programming", "network-programming"]
 edition = "2024"
 
 [workspace]
-members = ["native_client", "webrtc_server", "native_shared", "wasm_client", "signaling_shared"]
+members = ["native_peer", "wasm_peer", "common"]
 resolver = "3"
+exclude = ["examples/*"]
 
 [workspace.dependencies]
+# Internal crates
+native_peer = {path = "./native_peer/"}
+common = {path = "./common/"}
+wasm_peer = {path = "./wasm_peer/"}
+
+# dependencies
 anyhow = "1"
-clap = { version = "4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["full"] }
 tokio-tungstenite = { version = "0.29.0", features = ["native-tls-vendored"] }
 futures-util = "0.3"
 futures = "0.3"
+
+# wasm dependencies
+console_error_panic_hook = "0.1"
+js-sys = "0.3"
+web-sys = "0.3"
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+ws_stream_wasm = "0.7.5"
+gloo-timers = { version = "0.4", features = ["futures"] }
+
+[dependencies]
+common = {workspace = true}
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+native_peer = { workspace = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm_peer = { workspace = true }
+
+[dev-dependencies]
+anyhow = {workspace = true}
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+clap = { version = "4", features = ["derive"] }
+tokio = {workspace = true}
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+console_error_panic_hook = {workspace = true}
+wasm-bindgen = {workspace = true}
+wasm-bindgen-futures = {workspace = true}
+web-sys = {workspace = true}
+gloo-timers = { workspace = true}

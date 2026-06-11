@@ -318,6 +318,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "common"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "console_error_panic_hook"
 version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -401,6 +409,19 @@ checksum = "a4ae5f15dda3c708c0ade84bfee31ccab44a3da4f88015ed22f63732abe300c8"
 [[package]]
 name = "datachannel-socket"
 version = "0.1.1"
+dependencies = [
+ "anyhow",
+ "clap",
+ "common",
+ "console_error_panic_hook",
+ "gloo-timers",
+ "native_peer",
+ "tokio",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "wasm_peer",
+ "web-sys",
+]
 
 [[package]]
 name = "der"
@@ -823,29 +844,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "native_client"
+name = "native_peer"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "clap",
- "futures-util",
- "native_shared",
- "serde",
- "serde_json",
- "signaling_shared",
- "tokio",
- "tokio-tungstenite",
-]
-
-[[package]]
-name = "native_shared"
-version = "0.1.0"
-dependencies = [
- "anyhow",
+ "common",
  "futures-util",
  "serde",
  "serde_json",
- "signaling_shared",
  "str0m",
  "tokio",
  "tokio-tungstenite",
@@ -1332,14 +1338,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "signaling_shared"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "signature"
 version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1729,17 +1727,17 @@ dependencies = [
 ]
 
 [[package]]
-name = "wasm_client"
+name = "wasm_peer"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "common",
  "console_error_panic_hook",
  "futures-util",
  "gloo-timers",
  "js-sys",
  "serde",
  "serde_json",
- "signaling_shared",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
@@ -1754,21 +1752,6 @@ checksum = "6e0871acf327f283dc6da28a1696cdc64fb355ba9f935d052021fa77f35cce69"
 dependencies = [
  "js-sys",
  "wasm-bindgen",
-]
-
-[[package]]
-name = "webrtc_server"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "clap",
- "futures-util",
- "native_shared",
- "serde",
- "serde_json",
- "signaling_shared",
- "tokio",
- "tokio-tungstenite",
 ]
 
 [[package]]
