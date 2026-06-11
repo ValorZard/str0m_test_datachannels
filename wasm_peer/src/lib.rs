@@ -2,18 +2,18 @@ use anyhow::Result;
 use datachannel_socket_common::{Peer, PeerFactory, SignalMessage};
 use futures_util::{SinkExt, StreamExt};
 use gloo_timers::future::TimeoutFuture;
-use js_sys::{Array, Uint8Array};
+use js_sys::Uint8Array;
 use serde::{Deserialize, Serialize};
 use std::cell::OnceCell;
 use std::{cell::RefCell, rc::Rc};
 use wasm_bindgen::JsCast;
 use wasm_bindgen::closure::Closure;
 use wasm_bindgen::prelude::*;
-use wasm_bindgen_futures::{JsFuture, spawn_local};
+use wasm_bindgen_futures::JsFuture;
 use web_sys::{
-    Event, HtmlElement, HtmlInputElement, MessageEvent, RtcConfiguration, RtcDataChannel,
+    Event, MessageEvent, RtcConfiguration, RtcDataChannel,
     RtcDataChannelEvent, RtcIceCandidate, RtcIceCandidateInit, RtcIceConnectionState,
-    RtcIceGatheringState, RtcIceServer, RtcPeerConnection, RtcPeerConnectionIceEvent, RtcSdpType,
+    RtcIceGatheringState, RtcPeerConnection, RtcPeerConnectionIceEvent, RtcSdpType,
     RtcSessionDescriptionInit,
 };
 use ws_stream_wasm::{WsMessage, WsMeta};
