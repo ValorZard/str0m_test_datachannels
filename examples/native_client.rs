@@ -1,9 +1,7 @@
 use anyhow::{Result, anyhow, bail};
 use clap::Parser;
-use native_peer::{
-    NativeClientPeerFactory, NativePeer, RoleAction,
-};
 use common::PeerFactory;
+use native_peer::{NativeClientPeerFactory, NativePeer, RoleAction};
 use tokio::sync::oneshot;
 
 #[derive(Debug, Parser)]

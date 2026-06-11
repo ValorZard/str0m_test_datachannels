@@ -3,9 +3,7 @@ use std::net::IpAddr;
 use anyhow::{Result, anyhow, bail};
 use clap::Parser;
 use common::{Peer, PeerFactory, SignalMessage};
-use native_peer::{
-    NativePeer, NativeServerPeerFactory, RoleAction
-};
+use native_peer::{NativePeer, NativeServerPeerFactory, RoleAction};
 
 use tokio::{net::TcpListener, sync::oneshot, task::JoinSet};
 
