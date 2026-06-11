@@ -1,13 +1,10 @@
 use anyhow::{Result, anyhow, bail};
 use clap::Parser;
-use common::{Peer, PeerFactory, SignalMessage};
-use futures_util::StreamExt;
-use native_shared::{
-    NativeClientPeerFactory, NativePeer, RoleAction, read_msg, validate_advertised_addr, write_msg,
+use native_peer::{
+    NativeClientPeerFactory, NativePeer, RoleAction,
 };
-use std::net::{IpAddr, Ipv4Addr};
+use common::PeerFactory;
 use tokio::sync::oneshot;
-use tokio_tungstenite::connect_async;
 
 #[derive(Debug, Parser)]
 struct Args {

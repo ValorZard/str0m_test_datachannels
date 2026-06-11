@@ -409,6 +409,13 @@ checksum = "a4ae5f15dda3c708c0ade84bfee31ccab44a3da4f88015ed22f63732abe300c8"
 [[package]]
 name = "datachannel-socket"
 version = "0.1.1"
+dependencies = [
+ "anyhow",
+ "clap",
+ "common",
+ "native_peer",
+ "tokio",
+]
 
 [[package]]
 name = "der"
@@ -831,22 +838,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "native_client"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "clap",
- "common",
- "futures-util",
- "native_shared",
- "serde",
- "serde_json",
- "tokio",
- "tokio-tungstenite",
-]
-
-[[package]]
-name = "native_shared"
+name = "native_peer"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -1754,21 +1746,6 @@ checksum = "6e0871acf327f283dc6da28a1696cdc64fb355ba9f935d052021fa77f35cce69"
 dependencies = [
  "js-sys",
  "wasm-bindgen",
-]
-
-[[package]]
-name = "webrtc_server"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "clap",
- "common",
- "futures-util",
- "native_shared",
- "serde",
- "serde_json",
- "tokio",
- "tokio-tungstenite",
 ]
 
 [[package]]

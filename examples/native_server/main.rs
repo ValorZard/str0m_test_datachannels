@@ -3,10 +3,8 @@ use std::net::IpAddr;
 use anyhow::{Result, anyhow, bail};
 use clap::Parser;
 use common::{Peer, PeerFactory, SignalMessage};
-use futures_util::StreamExt;
-use native_shared::{
-    NativeClientPeerFactory, NativePeer, NativeServerPeerFactory, RoleAction, read_msg,
-    validate_advertised_addr, write_msg,
+use native_peer::{
+    NativePeer, NativeServerPeerFactory, RoleAction
 };
 
 use tokio::{net::TcpListener, sync::oneshot, task::JoinSet};

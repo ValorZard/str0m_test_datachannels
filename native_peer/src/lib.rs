@@ -24,7 +24,7 @@ use tokio_tungstenite::{WebSocketStream, tungstenite};
 
 // either return the advertise ip if its correct, or else generate a good one
 // this is especially useful for local testing since IP addresses and ports might be in use
-pub fn validate_advertised_addr(advertise_ip: IpAddr, udp_port: u16) -> Option<SocketAddr> {
+fn validate_advertised_addr(advertise_ip: IpAddr, udp_port: u16) -> Option<SocketAddr> {
     let advertised_addr = if advertise_ip.is_loopback() {
         // Discover the preferred outbound local interface without sending traffic.
         let socket = std::net::UdpSocket::bind("0.0.0.0:0").ok()?;
@@ -46,7 +46,7 @@ pub fn validate_advertised_addr(advertise_ip: IpAddr, udp_port: u16) -> Option<S
     Some(fallback_socket.local_addr().ok()?)
 }
 
-pub async fn write_msg<S>(
+async fn write_msg<S>(
     sink: &mut SplitSink<WebSocketStream<S>, tungstenite::Message>,
     msg: &SignalMessage,
 ) -> Result<(), std::io::Error>
@@ -61,7 +61,7 @@ where
     Ok(())
 }
 
-pub async fn read_msg<S>(
+async fn read_msg<S>(
     stream: &mut SplitStream<WebSocketStream<S>>,
 ) -> Result<SignalMessage, std::io::Error>
 where
