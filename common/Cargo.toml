@@ -2,6 +2,8 @@
 name = "datachannel_socket_common"
 version = "0.1.0"
 edition = "2024"
+description = "Common logic for datachannel-socket"
+license = "MIT OR Apache-2.0"
 
 [dependencies]
 serde = {workspace = true}

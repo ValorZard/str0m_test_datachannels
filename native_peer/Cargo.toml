@@ -2,6 +2,8 @@
 name = "datachannel_socket_native_peer"
 version = "0.1.0"
 edition = "2024"
+description = "Native peer for datachannel-socket"
+license = "MIT OR Apache-2.0"
 
 [dependencies]
 datachannel_socket_common = {path = "../common/", version = "0.1.0"}
