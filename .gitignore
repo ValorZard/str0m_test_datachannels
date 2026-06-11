@@ -1,2 +1,3 @@
 /target
-/wasm_client/dist
+/wasm_peer/dist
+/dist

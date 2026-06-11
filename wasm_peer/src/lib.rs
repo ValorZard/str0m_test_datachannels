@@ -19,7 +19,7 @@ use web_sys::{
 use ws_stream_wasm::{WsMessage, WsMeta};
 
 #[macro_export]
-macro_rules! log {
+macro_rules! peer_log {
     ($($arg:tt)*) => {
         web_sys::console::log_1(&format!($($arg)*).into());
     };
@@ -162,7 +162,7 @@ impl Peer for WasmPeer {
         // since we are connected to a public IP, we don't need to actually send ICE candidates,
         // but we do it to make firefox happy
         loop {
-            log!("{:?}", self.inner.pc.ice_gathering_state());
+            peer_log!("{:?}", self.inner.pc.ice_gathering_state());
             if self.inner.pc.ice_gathering_state() == web_sys::RtcIceGatheringState::Complete {
                 break;
             }
@@ -174,7 +174,7 @@ impl Peer for WasmPeer {
             .pc
             .local_description()
             .ok_or_else(|| JsValue::from_str("missing local description"))?;
-        log!("local description after gathering: {:?}", local.sdp());
+        peer_log!("local description after gathering: {:?}", local.sdp());
         Ok(local.sdp())
     }
 
@@ -224,7 +224,7 @@ fn install_peer_handlers(inner: &Rc<Inner>) -> Result<(), JsValue> {
                 return;
             }
 
-            log!("local candidate: {:?}", candidate_str);
+            peer_log!("local candidate: {:?}", candidate_str);
             // since we are just doing datachannels, we don't care about media, so no need for mid or mline
             inner_for_ice
                 .pending_local_ice
@@ -247,7 +247,7 @@ fn install_peer_handlers(inner: &Rc<Inner>) -> Result<(), JsValue> {
     let inner_for_state = Rc::clone(inner);
     let on_ice_state_change = Closure::wrap(Box::new(move |_e: Event| {
         let state = inner_for_state.pc.ice_connection_state();
-        log!("ICE connection state: {:?}", state);
+        peer_log!("ICE connection state: {:?}", state);
     }) as Box<dyn FnMut(_)>);
     inner
         .pc
@@ -323,7 +323,7 @@ pub fn drain_local_ice_candidates(peer: Rc<WasmPeer>) -> Vec<IceCandidateMessage
         .collect()
 }
 
-struct WasmPeerFactory {}
+pub struct WasmPeerFactory {}
 
 impl PeerFactory for WasmPeerFactory {
     type Error = JsValue;
@@ -361,63 +361,13 @@ impl PeerFactory for WasmPeerFactory {
             if let Some(WsMessage::Text(answer_string)) = recv_stream.next().await {
                 let parsed_answer = serde_json::from_str::<SignalMessage>(&answer_string).unwrap();
                 let answer_sdp = parsed_answer.sdp();
-                log!("received answer sdp: {:?}", answer_sdp);
+                peer_log!("received answer sdp: {:?}", answer_sdp);
                 wasm_peer.accept_answer(answer_sdp.as_str()).await.unwrap();
                 break;
             }
         }
         let _ = ws.close();
-        log!("we can close the websocket now, webrtc connection should be bootstrapped");
+        peer_log!("we can close the websocket now, webrtc connection should be bootstrapped");
         Ok(wasm_peer)
     }
-}
-
-fn connect_to_server(server_address: String) {
-    spawn_local(async move {
-        let factory = WasmPeerFactory::new(());
-        let wasm_peer = factory
-            .create_peer(server_address)
-            .await
-            .expect("should work");
-
-        // send until its open
-        loop {
-            if let Ok(_) = wasm_peer.send_text("Hello from WASM!".to_string()) {
-                log!("Success");
-                break;
-            }
-            TimeoutFuture::new(50).await;
-        }
-
-        // read messages coming in
-        loop {
-            if let Ok(message) = wasm_peer.take_received_messages() {
-                log!("Message from data channel: {message}");
-            }
-            TimeoutFuture::new(50).await;
-        }
-    });
-}
-fn main() {
-    console_error_panic_hook::set_once();
-
-    let window = web_sys::window().expect("no global `window` exists");
-    let document = window.document().expect("should have a document on window");
-    let _body = document.body().expect("document should have a body");
-
-    let server_searchbox = document
-        .get_element_by_id("server-searchbox")
-        .expect("should be here");
-
-    let a = Closure::<dyn FnMut()>::new(move || {
-        let server_searchbox: &HtmlInputElement = server_searchbox.dyn_ref().unwrap();
-        connect_to_server(server_searchbox.value());
-    });
-    document
-        .get_element_by_id("server-button")
-        .expect("should be here")
-        .dyn_ref::<HtmlElement>()
-        .unwrap()
-        .set_onclick(Some(a.as_ref().unchecked_ref()));
-    a.forget();
 }

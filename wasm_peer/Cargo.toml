@@ -1,23 +1,23 @@
 [package]
-name = "wasm_client"
+name = "wasm_peer"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
 common = {path = "../common/"}
 anyhow = {workspace = true}
-console_error_panic_hook = "0.1"
-js-sys = "0.3"
+console_error_panic_hook = {workspace = true}
+js-sys = {workspace = true}
 serde = {workspace = true}
 serde_json = {workspace = true}
-wasm-bindgen = "0.2"
-wasm-bindgen-futures = "0.4"
-ws_stream_wasm = "0.7.5"
+wasm-bindgen = {workspace = true}
+wasm-bindgen-futures = {workspace = true}
+ws_stream_wasm = {workspace = true}
 futures-util = {workspace = true}
-gloo-timers = { version = "0.4", features = ["futures"] }
+gloo-timers = {workspace = true}
 
 [dependencies.web-sys]
-version = "0.3"
+workspace = true
 features = [
   "console",
   "BinaryType",

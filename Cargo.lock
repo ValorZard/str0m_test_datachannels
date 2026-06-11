@@ -413,8 +413,14 @@ dependencies = [
  "anyhow",
  "clap",
  "common",
+ "console_error_panic_hook",
+ "gloo-timers",
  "native_peer",
  "tokio",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "wasm_peer",
+ "web-sys",
 ]
 
 [[package]]
@@ -1721,7 +1727,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "wasm_client"
+name = "wasm_peer"
 version = "0.1.0"
 dependencies = [
  "anyhow",
