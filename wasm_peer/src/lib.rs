@@ -323,7 +323,7 @@ impl PeerFactory for WasmPeerFactory {
         };
 
         let (mut send_stream, mut recv_stream) = wsio.split();
-        let offer_sdp = wasm_peer.create_offer("chat").await.unwrap();
+        let offer_sdp = wasm_peer.create_offer("chat").await?;
         let signaling_message = SignalMessage::Offer { sdp: offer_sdp };
         let signaling_message = serde_json::to_string(&signaling_message).unwrap();
         let send_message = WsMessage::Text(signaling_message);
@@ -335,7 +335,7 @@ impl PeerFactory for WasmPeerFactory {
                 let parsed_answer = serde_json::from_str::<SignalMessage>(&answer_string).unwrap();
                 let answer_sdp = parsed_answer.sdp();
                 peer_log!("received answer sdp: {:?}", answer_sdp);
-                wasm_peer.accept_answer(answer_sdp.as_str()).await.unwrap();
+                wasm_peer.accept_answer(answer_sdp.as_str()).await?;
                 break;
             }
         }
