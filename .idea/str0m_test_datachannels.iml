@@ -7,6 +7,12 @@
       <sourceFolder url="file://$MODULE_DIR$/signaling_shared/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/wasm_client/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/webrtc_server/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/common/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/native_peer/examples" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/native_peer/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/wasm_peer/examples" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/wasm_peer/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
     </content>
     <orderEntry type="inheritedJdk" />
