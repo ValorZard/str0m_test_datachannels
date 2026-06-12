@@ -4,9 +4,7 @@ use gloo_timers::future::TimeoutFuture;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::closure::Closure;
 use wasm_bindgen_futures::spawn_local;
-use web_sys::{
-    HtmlElement, HtmlInputElement,
-};
+use web_sys::{HtmlElement, HtmlInputElement};
 
 fn connect_to_server(server_address: String) {
     spawn_local(async move {

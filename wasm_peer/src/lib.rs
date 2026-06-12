@@ -11,10 +11,9 @@ use wasm_bindgen::closure::Closure;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{
-    Event, MessageEvent, RtcConfiguration, RtcDataChannel,
-    RtcDataChannelEvent, RtcIceCandidate, RtcIceCandidateInit, RtcIceConnectionState,
-    RtcIceGatheringState, RtcPeerConnection, RtcPeerConnectionIceEvent, RtcSdpType,
-    RtcSessionDescriptionInit,
+    Event, MessageEvent, RtcConfiguration, RtcDataChannel, RtcDataChannelEvent, RtcIceCandidate,
+    RtcIceCandidateInit, RtcIceConnectionState, RtcIceGatheringState, RtcPeerConnection,
+    RtcPeerConnectionIceEvent, RtcSdpType, RtcSessionDescriptionInit,
 };
 use ws_stream_wasm::{WsMessage, WsMeta};
 
@@ -74,19 +73,6 @@ impl WasmPeer {
         install_peer_handlers(&inner)?;
 
         Ok(WasmPeer { inner })
-    }
-
-    pub async fn add_ice_candidate(&self, candidate: String) -> Result<(), JsValue> {
-        let init = RtcIceCandidateInit::new(&candidate);
-        let candidate = RtcIceCandidate::new(&init)?;
-        JsFuture::from(
-            self.inner
-                .pc
-                .add_ice_candidate_with_opt_rtc_ice_candidate(Some(&candidate)),
-        )
-        .await?;
-
-        Ok(())
     }
 
     pub fn send_text(&self, text: String) -> Result<(), JsValue> {
@@ -307,14 +293,6 @@ fn install_data_channel_handlers(inner: &Rc<Inner>, dc: &RtcDataChannel) -> Resu
     inner.on_data_channel_message.replace(Some(on_message));
 
     Ok(())
-}
-
-pub fn drain_local_ice_candidates(peer: Rc<WasmPeer>) -> Vec<IceCandidateMessage> {
-    peer.inner
-        .pending_local_ice
-        .borrow_mut()
-        .drain(..)
-        .collect()
 }
 
 pub struct WasmPeerFactory {}
