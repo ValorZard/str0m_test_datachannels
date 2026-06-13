@@ -1,3 +1,5 @@
+use anyhow::{Result, anyhow};
+use datachannel_socket_common::DataChannelMessage;
 use datachannel_socket_wasm_peer::{WasmPeerFactory, peer_log};
 use gloo_timers::future::TimeoutFuture;
 use wasm_bindgen::JsCast;
@@ -7,30 +9,71 @@ use web_sys::{HtmlElement, HtmlInputElement};
 
 fn connect_to_server(server_address: String) {
     spawn_local(async move {
-        let factory = WasmPeerFactory::new();
-        let wasm_peer = factory
-            .create_peer(server_address)
-            .await
-            .expect("should work");
+        let result: Result<_> = async {
+            let factory = WasmPeerFactory::new();
+            let mut wasm_peer = factory
+                .create_peer(server_address)
+                .await
+                .expect("should work");
 
-        // send until its open
-        loop {
-            if let Ok(_) = wasm_peer.send_text("Hello from WASM!".to_string()) {
-                if let Ok(_) = wasm_peer.send_bytes(vec![0, 1, 3, 4, 5, 63, 5, 67, 42, 69]) {
-                    peer_log!("Success with bytes");
+            // wait until we have channels
+            let mut waited_ms = 0u32;
+            let mut channel_ids = wasm_peer.get_channel_ids();
+            peer_log!(
+                "Checking for channels after signaling, initial_count={}",
+                channel_ids.len()
+            );
+
+            while channel_ids.is_empty() {
+                if waited_ms % 500 == 0 {
+                    peer_log!(
+                        "Waiting on channels to be available... waited={}ms",
+                        waited_ms
+                    );
                 }
-                peer_log!("Success");
-                break;
-            }
-            TimeoutFuture::new(50).await;
-        }
 
-        // read messages coming in
-        loop {
-            for message in wasm_peer.take_received_messages() {
-                peer_log!("Message from data channel: {message:?}");
+                TimeoutFuture::new(50).await;
+                waited_ms += 50;
+                channel_ids = wasm_peer.get_channel_ids();
+
+                if waited_ms >= 10_000 {
+                    return Err(anyhow!(
+                        "Timed out waiting for data channel to open after {}ms",
+                        waited_ms
+                    ));
+                }
             }
-            TimeoutFuture::new(50).await;
+
+            peer_log!(
+                "Channels available after {}ms, channel_ids={:?}",
+                waited_ms,
+                channel_ids
+            );
+
+            let (mut incoming_datachannel_message_receiver, outgoing_datachannel_message_sender) =
+                wasm_peer.get_communication_channels()?;
+            for channel in channel_ids {
+                outgoing_datachannel_message_sender.unbounded_send((
+                    channel,
+                    DataChannelMessage::Text("Hello from wasm client!".into()),
+                ))?;
+
+                outgoing_datachannel_message_sender.unbounded_send((
+                    channel,
+                    DataChannelMessage::Binary("Hello from wasm client in binary!".into()),
+                ))?;
+            }
+
+            while let Ok(message) = incoming_datachannel_message_receiver.recv().await {
+                peer_log!("Received incoming datachannel message: {:?}", message);
+            }
+
+            Ok(())
+        }
+        .await;
+
+        if let Err(e) = result {
+            peer_log!("Error! {e}");
         }
     });
 }

@@ -446,6 +446,7 @@ dependencies = [
  "anyhow",
  "console_error_panic_hook",
  "datachannel_socket_common",
+ "futures",
  "futures-util",
  "gloo-timers",
  "js-sys",

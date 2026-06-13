@@ -1,10 +1,14 @@
 use anyhow::Result;
 use datachannel_socket_common::{DataChannelMessage, SignalMessage};
+use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender, unbounded};
 use futures_util::{SinkExt, StreamExt};
 use gloo_timers::future::TimeoutFuture;
 use js_sys::Uint8Array;
+use js_sys::futures::spawn_local;
 use serde::{Deserialize, Serialize};
 use std::cell::OnceCell;
+use std::collections::HashMap;
+use std::io::ErrorKind;
 use std::{cell::RefCell, rc::Rc};
 use wasm_bindgen::JsCast;
 use wasm_bindgen::closure::Closure;
@@ -31,12 +35,21 @@ pub struct IceCandidateMessage {
     pub sdp_mline_index: Option<u16>,
 }
 
+// See: https://developer.mozilla.org/en-US/docs/Web/API/RTCDataChannel/id
+type ChannelId = u16;
+
 struct Inner {
     pc: RtcPeerConnection,
-    data_channel: RefCell<Option<RtcDataChannel>>,
-    is_data_channel_open: RefCell<bool>,
+    data_channels: RefCell<HashMap<ChannelId, RtcDataChannel>>,
     pending_local_ice: RefCell<Vec<IceCandidateMessage>>,
-    received_messages: RefCell<Vec<DataChannelMessage>>,
+    incoming_datachannel_message_sender: UnboundedSender<(ChannelId, DataChannelMessage)>,
+    // we want to let client api take the receiver so clients can read what's come in
+    incoming_datachannel_message_receiver:
+        RefCell<Option<UnboundedReceiver<(ChannelId, DataChannelMessage)>>>,
+    // we can clone this and give it to the user before the native peer starts running for real
+    outgoing_datachannel_message_sender: UnboundedSender<(ChannelId, DataChannelMessage)>,
+    outgoing_datachannel_message_receiver:
+        RefCell<UnboundedReceiver<(ChannelId, DataChannelMessage)>>,
 
     on_ice_candidate: OnceCell<Closure<dyn FnMut(RtcPeerConnectionIceEvent)>>,
     on_ice_connection_state_change: OnceCell<Closure<dyn FnMut(Event)>>,
@@ -57,12 +70,23 @@ impl WasmPeer {
         let config = make_rtc_config();
         let pc = RtcPeerConnection::new_with_configuration(&config)?;
 
+        let (incoming_datachannel_message_sender, incoming_datachannel_message_receiver) =
+            unbounded();
+        let (outgoing_datachannel_message_sender, outgoing_datachannel_message_receiver) =
+            unbounded();
+
         let inner = Rc::new(Inner {
             pc,
-            data_channel: RefCell::new(None),
-            is_data_channel_open: RefCell::new(false),
+            data_channels: RefCell::new(HashMap::new()),
             pending_local_ice: RefCell::new(Vec::new()),
-            received_messages: RefCell::new(Vec::new()),
+            incoming_datachannel_message_sender,
+            incoming_datachannel_message_receiver: RefCell::new(Some(
+                incoming_datachannel_message_receiver,
+            )),
+            outgoing_datachannel_message_sender,
+            outgoing_datachannel_message_receiver: RefCell::new(
+                outgoing_datachannel_message_receiver,
+            ),
             on_ice_candidate: OnceCell::new(),
             on_ice_connection_state_change: OnceCell::new(),
             on_data_channel: OnceCell::new(),
@@ -78,8 +102,7 @@ impl WasmPeer {
     pub async fn create_offer(&mut self, channel_label: &str) -> Result<String, JsValue> {
         // first create an internal data channel to initalize the peer connection
         let dc = self.inner.pc.create_data_channel(channel_label);
-        install_data_channel_handlers(&self.inner, &dc)?;
-        self.inner.data_channel.replace(Some(dc));
+        install_data_channel_handlers(&self.inner, dc)?;
 
         let offer_val = JsFuture::from(self.inner.pc.create_offer()).await?;
         let offer: RtcSessionDescriptionInit = offer_val.unchecked_into();
@@ -129,34 +152,18 @@ impl WasmPeer {
         Ok(())
     }
 
-    pub fn send_text(&self, text: String) -> Result<(), JsValue> {
-        if *self.inner.is_data_channel_open.borrow() {
-            let dc = self
-                .inner
-                .data_channel
-                .borrow()
-                .as_ref()
-                .cloned()
-                .ok_or_else(|| JsValue::from_str("data channel not available"))?;
-
-            return dc.send_with_str(&text);
-        }
-        Err(JsValue::from_str("Data channel hasn't initialized yet!"))
+    pub fn send_text(&self, channel_id: ChannelId, text: String) -> Result<(), JsValue> {
+        self.inner
+            .outgoing_datachannel_message_sender
+            .unbounded_send((channel_id, DataChannelMessage::Text(text)))
+            .map_err(|e| e.to_string().into())
     }
 
-    pub fn send_bytes(&self, bytes: Vec<u8>) -> Result<(), JsValue> {
-        if *self.inner.is_data_channel_open.borrow() {
-            let dc = self
-                .inner
-                .data_channel
-                .borrow()
-                .as_ref()
-                .cloned()
-                .ok_or_else(|| JsValue::from_str("data channel not available"))?;
-
-            return dc.send_with_u8_array(&bytes);
-        }
-        Err(JsValue::from_str("Data channel hasn't initialized yet!"))
+    pub fn send_bytes(&self, channel_id: ChannelId, bytes: Vec<u8>) -> Result<(), JsValue> {
+        self.inner
+            .outgoing_datachannel_message_sender
+            .unbounded_send((channel_id, DataChannelMessage::Binary(bytes)))
+            .map_err(|e| e.to_string().into())
     }
 
     pub fn ice_connection_state(&self) -> RtcIceConnectionState {
@@ -173,9 +180,31 @@ impl WasmPeer {
 }
 
 impl WasmPeer {
-    pub fn take_received_messages(&self) -> Vec<DataChannelMessage> {
-        let mut msgs = self.inner.received_messages.borrow_mut();
-        msgs.drain(..).collect()
+    pub fn get_communication_channels(
+        &mut self,
+    ) -> Result<
+        (
+            UnboundedReceiver<(ChannelId, DataChannelMessage)>,
+            UnboundedSender<(ChannelId, DataChannelMessage)>,
+        ),
+        std::io::Error,
+    > {
+        let incoming_datachannel_message_receiver = self
+            .inner
+            .incoming_datachannel_message_receiver
+            .take()
+            .ok_or(std::io::Error::new(
+                ErrorKind::NotConnected,
+                "RTC not connected",
+            ))?;
+        Ok((
+            incoming_datachannel_message_receiver,
+            self.inner.outgoing_datachannel_message_sender.clone(),
+        ))
+    }
+
+    pub fn get_channel_ids(&self) -> Vec<ChannelId> {
+        self.inner.data_channels.borrow().keys().cloned().collect()
     }
 }
 
@@ -230,14 +259,13 @@ fn install_peer_handlers(inner: &Rc<Inner>) -> Result<(), JsValue> {
     let inner_for_dc = Rc::clone(inner);
     let on_data_channel = Closure::wrap(Box::new(move |e: RtcDataChannelEvent| {
         let dc = e.channel();
-        if let Err(err) = install_data_channel_handlers(&inner_for_dc, &dc) {
+        if let Err(err) = install_data_channel_handlers(&inner_for_dc, dc.clone()) {
             web_sys::console::error_1(&JsValue::from_str(&format!(
                 "failed to install data channel handlers: {:?}",
                 err
             )));
             return;
         }
-        inner_for_dc.data_channel.replace(Some(dc));
     }) as Box<dyn FnMut(_)>);
     inner
         .pc
@@ -247,38 +275,69 @@ fn install_peer_handlers(inner: &Rc<Inner>) -> Result<(), JsValue> {
         .set(on_data_channel)
         .expect("Should only be init once");
 
+    // sender pump to send messages to the datachannels
+    let inner_for_datachannel_sender = Rc::clone(&inner);
+    spawn_local(async move {
+        while let Ok((channel_id, msg)) = inner_for_datachannel_sender
+            .outgoing_datachannel_message_receiver
+            .borrow_mut()
+            .recv()
+            .await
+        {
+            if let Some(dc) = inner_for_datachannel_sender
+                .data_channels
+                .borrow()
+                .get(&channel_id)
+            {
+                match msg {
+                    DataChannelMessage::Text(text) => {
+                        let _ = dc.send_with_str(&text);
+                    }
+                    DataChannelMessage::Binary(bytes) => {
+                        let _ = dc.send_with_u8_array(&bytes);
+                    }
+                }
+            }
+        }
+    });
+
     Ok(())
 }
 
-fn install_data_channel_handlers(inner: &Rc<Inner>, dc: &RtcDataChannel) -> Result<(), JsValue> {
+fn install_data_channel_handlers(inner: &Rc<Inner>, dc: RtcDataChannel) -> Result<(), JsValue> {
     let inner_for_open = Rc::clone(inner);
+    let dc_for_open = dc.clone();
     let on_open = Closure::wrap(Box::new(move |_e: Event| {
-        *inner_for_open.is_data_channel_open.borrow_mut() = true;
+        // add data_channel to hashmap
+        let dc_id = dc_for_open.id().expect("There should be an ID here.");
+        inner_for_open
+            .data_channels
+            .borrow_mut()
+            .insert(dc_id, dc_for_open.clone());
         web_sys::console::log_1(&"data channel open".into());
     }) as Box<dyn FnMut(_)>);
     dc.set_onopen(Some(on_open.as_ref().unchecked_ref()));
     inner.on_data_channel_open.replace(Some(on_open));
 
     let inner_for_msg = Rc::clone(inner);
+    let dc_for_msg = dc.clone();
     let on_message = Closure::wrap(Box::new(move |e: MessageEvent| {
+        let dc_id = dc_for_msg.id().expect("There should be an ID here.");
         if let Some(text) = e.data().as_string() {
-            inner_for_msg
-                .received_messages
-                .borrow_mut()
-                .push(DataChannelMessage::Text(text));
+            let _ = inner_for_msg
+                .incoming_datachannel_message_sender
+                .unbounded_send((dc_id, DataChannelMessage::Text(text)));
             return;
         }
 
         if let Ok(buf) = e.data().dyn_into::<js_sys::ArrayBuffer>() {
             let arr = Uint8Array::new(&buf);
             let out = arr.to_vec();
-            inner_for_msg
-                .received_messages
-                .borrow_mut()
-                .push(DataChannelMessage::Binary(out));
+            let _ = inner_for_msg
+                .incoming_datachannel_message_sender
+                .unbounded_send((dc_id, DataChannelMessage::Binary(out)));
             return;
         }
-
         web_sys::console::warn_1(&"received unsupported message type".into());
     }) as Box<dyn FnMut(_)>);
     dc.set_onmessage(Some(on_message.as_ref().unchecked_ref()));

@@ -16,6 +16,7 @@ wasm-bindgen = {workspace = true}
 wasm-bindgen-futures = {workspace = true}
 ws_stream_wasm = {workspace = true}
 futures-util = {workspace = true}
+futures = {workspace = true}
 gloo-timers = {workspace = true}
 
 [dependencies.web-sys]
