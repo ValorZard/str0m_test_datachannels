@@ -1,5 +1,7 @@
 use anyhow::Result;
-use datachannel_socket_common::{ChannelRef, DataChannelMessage, SignalMessage, WebRTCCommunicationHandle, WebRTCNotification};
+use datachannel_socket_common::{
+    ChannelRef, DataChannelMessage, SignalMessage, WebRTCCommunicationHandle, WebRTCNotification,
+};
 use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender, unbounded};
 use futures_util::{SinkExt, StreamExt};
 use gloo_timers::future::TimeoutFuture;
@@ -48,7 +50,8 @@ struct Inner {
         RefCell<Option<UnboundedReceiver<(ChannelRef, DataChannelMessage)>>>,
     // we can clone this and give it to the user before the native peer starts running for real
     outgoing_datachannel_message_sender: UnboundedSender<(ChannelRef, DataChannelMessage)>,
-    outgoing_datachannel_message_receiver: RefCell<UnboundedReceiver<(ChannelRef, DataChannelMessage)>>,
+    outgoing_datachannel_message_receiver:
+        RefCell<UnboundedReceiver<(ChannelRef, DataChannelMessage)>>,
 
     on_ice_candidate: OnceCell<Closure<dyn FnMut(RtcPeerConnectionIceEvent)>>,
     on_ice_connection_state_change: OnceCell<Closure<dyn FnMut(Event)>>,
@@ -172,7 +175,8 @@ impl WasmPeer {
         &mut self,
     ) -> Result<WebRTCCommunicationHandle, std::io::Error> {
         let webrtc_notification_receiver =
-            self.inner.webrtc_notification_receiver
+            self.inner
+                .webrtc_notification_receiver
                 .take()
                 .ok_or(std::io::Error::new(
                     ErrorKind::AlreadyExists,
@@ -346,7 +350,10 @@ fn install_data_channel_handlers(inner: &Rc<Inner>, dc: RtcDataChannel) -> Resul
     let inner_for_msg = Rc::clone(inner);
     let dc_for_msg = dc.clone();
     let on_message = Closure::wrap(Box::new(move |e: MessageEvent| {
-        let channel_ref = ChannelRef {label: dc_for_msg.label(), id_hint: dc_for_msg.id()};
+        let channel_ref = ChannelRef {
+            label: dc_for_msg.label(),
+            id_hint: dc_for_msg.id(),
+        };
 
         if let Some(text) = e.data().as_string() {
             if let Err(err) = inner_for_msg

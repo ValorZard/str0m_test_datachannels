@@ -39,8 +39,12 @@ fn connect_to_server(server_address: String) {
                 );
             }
 
-            while let Ok((channel_ref, message)) = communication_handle.recv_datachannel_message().await {
-                peer_log!("From {channel_ref:?} Received incoming datachannel message: {message:?}");
+            while let Ok((channel_ref, message)) =
+                communication_handle.recv_datachannel_message().await
+            {
+                peer_log!(
+                    "From {channel_ref:?} Received incoming datachannel message: {message:?}"
+                );
             }
 
             Ok(())
