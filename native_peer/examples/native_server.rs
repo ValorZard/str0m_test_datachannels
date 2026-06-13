@@ -5,6 +5,7 @@ use clap::Parser;
 use datachannel_socket_native_peer::NativeServerPeerFactory;
 
 use tokio::{net::TcpListener, sync::oneshot, task::JoinSet};
+use datachannel_socket_common::DataChannelMessage;
 
 #[derive(Debug, Parser)]
 struct Args {
@@ -31,19 +32,15 @@ async fn run_server(args: Args) -> Result<()> {
     while let Ok(mut peer) = factory.create_peer(args.advertise_ip, args.udp_port).await {
         join_set.spawn(async move {
             let (tx, _rx) = oneshot::channel::<()>();
-            let (
-                channel_id_db,
-                mut incoming_datachannel_message_receiver,
-                outgoing_datachannel_message_sender,
-            ) = peer.get_communication_data()?;
+            let mut communication_handle = peer.get_communication_handle()?;
             tokio::spawn(async move {
                 if let Err(e) = peer.run("server", tx).await {
                     println!("Peer failed with error {e}");
                 }
             });
-            while let Ok(message) = incoming_datachannel_message_receiver.recv().await {
-                println!("Received incoming datachannel message: {:?}", message);
-                outgoing_datachannel_message_sender.unbounded_send(message)?;
+            while let Ok((channel_ref, message)) = communication_handle.recv_datachannel_message().await {
+                println!("From {channel_ref:?} Received incoming datachannel message: {message:?}");
+                let _ = communication_handle.send_datachannel_message(channel_ref,  message);
             }
             Ok(())
         });

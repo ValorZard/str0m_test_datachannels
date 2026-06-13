@@ -1,11 +1,11 @@
 use anyhow::Result;
-use datachannel_socket_common::{DataChannelMessage, SignalMessage};
+use datachannel_socket_common::{ChannelRef, DataChannelMessage, SignalMessage, WebRTCCommunicationHandle, WebRTCNotification};
 use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender, unbounded};
 use futures_util::{
     SinkExt, StreamExt,
     stream::{SplitSink, SplitStream},
 };
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::io::ErrorKind;
 use std::sync::Arc;
 use std::{
@@ -100,34 +100,44 @@ where
     }
 }
 
-#[derive(Clone)]
-pub struct ChannelIdDb {
-    inner: Arc<tokio::sync::Mutex<HashSet<ChannelId>>>,
+// double-sided hashmap
+struct ChannelMap {
+    id_to_ref: HashMap<ChannelId, ChannelRef>,
+    ref_to_id: HashMap<ChannelRef, ChannelId>,
 }
 
-impl ChannelIdDb {
-    pub fn new() -> Self {
+impl ChannelMap {
+    fn new() -> ChannelMap {
         Self {
-            inner: Arc::new(tokio::sync::Mutex::new(HashSet::new())),
+            id_to_ref: HashMap::new(),
+            ref_to_id: HashMap::new(),
         }
     }
 
-    pub async fn get(&self, id: ChannelId) -> Option<ChannelId> {
-        self.inner.lock().await.get(&id).cloned()
+    fn get_ref_of_id(&self, id: &ChannelId) -> Option<&ChannelRef> {
+        self.id_to_ref.get(id)
     }
 
-    pub async fn get_all(&self) -> Vec<ChannelId> {
-        self.inner.lock().await.iter().cloned().collect()
+    fn get_id_of_ref(&self, channel_ref: &ChannelRef) -> Option<&ChannelId> {
+        self.ref_to_id.get(channel_ref)
     }
 
-    // only NativePeer has permission to insert or remove
-    async fn insert(&self, id: ChannelId) -> bool {
-        self.inner.lock().await.insert(id)
+    fn add_channel(&mut self, rtc: &mut Rtc, channel_id: ChannelId) -> Option<ChannelRef> {
+        if let Some(ch) = rtc.channel(channel_id) && let Some(config) = ch.config() {
+            let channel_ref = ChannelRef {label: config.label.clone(), id_hint: config.negotiated};
+            self.id_to_ref.insert(channel_id, channel_ref.clone());
+            self.ref_to_id.insert(channel_ref.clone(), channel_id);
+            Some(channel_ref)
+        } else {
+            None
+        }
     }
 
-    // only NativePeer has permission to insert or remove
-    async fn remove(&self, id: ChannelId) -> bool {
-        self.inner.lock().await.remove(&id)
+    fn remove_channel(&mut self, channel_id: ChannelId) {
+        let channel_ref = self.id_to_ref.remove(&channel_id);
+        if let Some(channel_ref) = channel_ref {
+            self.ref_to_id.remove(&channel_ref);
+        }
     }
 }
 
@@ -137,14 +147,17 @@ pub struct NativePeer {
     pub bound_addr: SocketAddr,      // wildcard or actual socket bind
     pub advertised_addr: SocketAddr, // ICE candidate address exposed to peer
     pending_offer: Option<SdpPendingOffer>,
-    channel_id_db: ChannelIdDb,
-    incoming_datachannel_message_sender: UnboundedSender<(ChannelId, DataChannelMessage)>,
+    webrtc_notification_sender: UnboundedSender<WebRTCNotification>,
+    channel_map: ChannelMap,
+    // we want to let client api take the receiver so clients can read what's come in
+    webrtc_notification_receiver: Option<UnboundedReceiver<WebRTCNotification>>,
+    incoming_datachannel_message_sender: UnboundedSender<(ChannelRef, DataChannelMessage)>,
     // we want to let client api take the receiver so clients can read what's come in
     incoming_datachannel_message_receiver:
-        Option<UnboundedReceiver<(ChannelId, DataChannelMessage)>>,
+        Option<UnboundedReceiver<(ChannelRef, DataChannelMessage)>>,
     // we can clone this and give it to the user before the native peer starts running for real
-    outgoing_datachannel_message_sender: UnboundedSender<(ChannelId, DataChannelMessage)>,
-    outgoing_datachannel_message_receiver: UnboundedReceiver<(ChannelId, DataChannelMessage)>,
+    outgoing_datachannel_message_sender: UnboundedSender<(ChannelRef, DataChannelMessage)>,
+    outgoing_datachannel_message_receiver: UnboundedReceiver<(ChannelRef, DataChannelMessage)>,
 }
 
 impl NativePeer {
@@ -162,6 +175,7 @@ impl NativePeer {
         let candidate = Candidate::host(advertised_addr, "udp")
             .map_err(|e| std::io::Error::other(e.to_string()))?;
 
+        let (webrtc_notification_sender, webrtc_notification_receiver) = unbounded();
         let (incoming_datachannel_message_sender, incoming_datachannel_message_receiver) =
             unbounded();
         let (outgoing_datachannel_message_sender, outgoing_datachannel_message_receiver) =
@@ -173,7 +187,9 @@ impl NativePeer {
             bound_addr,
             advertised_addr,
             pending_offer: None,
-            channel_id_db: ChannelIdDb::new(),
+            channel_map: ChannelMap::new(),
+            webrtc_notification_sender,
+            webrtc_notification_receiver: Some(webrtc_notification_receiver),
             incoming_datachannel_message_sender,
             incoming_datachannel_message_receiver: Some(incoming_datachannel_message_receiver),
             outgoing_datachannel_message_sender,
@@ -185,28 +201,21 @@ impl NativePeer {
         Ok(peer)
     }
 
-    pub fn get_communication_data(
+    pub fn get_communication_handle(
         &mut self,
-    ) -> Result<
-        (
-            ChannelIdDb,
-            UnboundedReceiver<(ChannelId, DataChannelMessage)>,
-            UnboundedSender<(ChannelId, DataChannelMessage)>,
-        ),
-        std::io::Error,
-    > {
+    ) -> Result<WebRTCCommunicationHandle,std::io::Error> {
+        let webrtc_notification_receiver = self.webrtc_notification_receiver.take().ok_or(std::io::Error::new(
+            ErrorKind::AlreadyExists,
+            "WebRTC Channel receiver already sent out",
+        ))?;
         let incoming_datachannel_message_receiver = self
             .incoming_datachannel_message_receiver
             .take()
             .ok_or(std::io::Error::new(
-                ErrorKind::NotConnected,
-                "RTC not connected",
+                ErrorKind::AlreadyExists,
+                "Incoming Channel receiver already sent out",
             ))?;
-        Ok((
-            self.channel_id_db.clone(),
-            incoming_datachannel_message_receiver,
-            self.outgoing_datachannel_message_sender.clone(),
-        ))
+        Ok(WebRTCCommunicationHandle::new(webrtc_notification_receiver, incoming_datachannel_message_receiver, self.outgoing_datachannel_message_sender.clone()))
     }
 
     // once this runs, we won't be able to access any channel receivers or channel data, so we need to get it beforehand
@@ -237,21 +246,23 @@ impl NativePeer {
                         }
                         Event::ChannelOpen(cid, label) => {
                             println!("{peer_name}: channel open: {label:?}");
-                            self.channel_id_db.insert(cid).await;
+                            let channel_ref = self.channel_map.add_channel(&mut self.rtc, cid).expect("channel should be open");
+                            let _ = self.webrtc_notification_sender.send(WebRTCNotification::ChannelOpen(channel_ref)).await;
                         }
                         Event::ChannelData(data) => {
                             let data_as_string = String::from_utf8_lossy(&data.data);
                             println!("{peer_name}: got data: {data_as_string:?}");
+                            let channel_ref = self.channel_map.get_ref_of_id(&data.id).expect("channel should exist").clone();
                             if data.binary {
                                 let _ = self
                                     .incoming_datachannel_message_sender
-                                    .send((data.id, DataChannelMessage::Binary(data.data)))
+                                    .send((channel_ref, DataChannelMessage::Binary(data.data)))
                                     .await;
                             } else {
                                 let _ = self
                                     .incoming_datachannel_message_sender
                                     .send((
-                                        data.id,
+                                        channel_ref,
                                         DataChannelMessage::Text(data_as_string.parse()?),
                                     ))
                                     .await;
@@ -259,7 +270,7 @@ impl NativePeer {
                         }
                         Event::ChannelClose(cid) => {
                             println!("{peer_name}: channel close: {cid:?}");
-                            self.channel_id_db.remove(cid).await;
+                            self.channel_map.remove_channel(cid);
                         }
                         other => {
                             println!("{peer_name}: event: {other:?}");
@@ -294,8 +305,8 @@ impl NativePeer {
                 }
                 // TODO: Is this fine? Or should we put this in a while loop before the select?
                 msg = self.outgoing_datachannel_message_receiver.recv() => {
-                    if let Ok((cid, msg)) = msg {
-                        if let Some(mut ch) = self.rtc.channel(cid) {
+                    if let Ok((channel_ref, msg)) = msg {
+                        if let Some(cid) = self.channel_map.get_id_of_ref(&channel_ref) && let Some(mut ch) = self.rtc.channel(*cid) {
                             match msg {
                                 DataChannelMessage::Text(text) => {
                                     ch.write(false, text.as_bytes())?;

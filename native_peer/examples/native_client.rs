@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap::Parser;
-use datachannel_socket_common::DataChannelMessage;
+use datachannel_socket_common::{DataChannelMessage, WebRTCNotification};
 use datachannel_socket_native_peer::NativeClientPeerFactory;
 use std::time::Duration;
 use tokio::sync::oneshot;
@@ -29,31 +29,27 @@ async fn run_client(args: &Args) -> Result<()> {
     let (tx, rx) = oneshot::channel::<()>();
     let msg = args.message.as_bytes().to_vec();
 
-    let (
-        channel_id_db,
-        mut incoming_datachannel_message_receiver,
-        outgoing_datachannel_message_sender,
-    ) = peer.get_communication_data()?;
+    let mut communication_handle = peer.get_communication_handle()?;
 
     tokio::spawn(async move { peer.run("client", tx).await });
 
     // TODO: Find a better way to tell if the client has started running
-    tokio::time::sleep(Duration::from_secs(1)).await;
-
-    for channel in channel_id_db.get_all().await {
-        outgoing_datachannel_message_sender.unbounded_send((
-            channel,
-            DataChannelMessage::Text("Hello from native client!".into()),
-        ))?;
-
-        outgoing_datachannel_message_sender.unbounded_send((
-            channel,
-            DataChannelMessage::Binary("Hello from native client in binary!".into()),
-        ))?;
+    let mut channels = Vec::new();
+    // TODO: just take one channel for now, figure out something better later
+    while let Ok(notification) = communication_handle.recv_notification().await {
+        if let WebRTCNotification::ChannelOpen(channel_ref) = notification {
+            channels.push(channel_ref);
+            break;
+        }
     }
 
-    while let Ok(message) = incoming_datachannel_message_receiver.recv().await {
-        println!("Received incoming datachannel message: {:?}", message);
+    for channel_ref in channels {
+        let _ = communication_handle.send_datachannel_message(channel_ref.clone(),  DataChannelMessage::Text("Hello from native client!".into()));
+        let _ = communication_handle.send_datachannel_message(channel_ref,  DataChannelMessage::Binary("Hello from native client in binary!".into()));
+    }
+
+    while let Ok((channel_ref, message)) = communication_handle.recv_datachannel_message().await {
+        println!("From {channel_ref:?} Received incoming datachannel message: {message:?}");
     }
 
     Ok(())
