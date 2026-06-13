@@ -2,7 +2,7 @@ use std::net::IpAddr;
 
 use anyhow::Result;
 use clap::Parser;
-use datachannel_socket_native_peer::{NativeServerPeerFactory};
+use datachannel_socket_native_peer::NativeServerPeerFactory;
 
 use tokio::{net::TcpListener, sync::oneshot, task::JoinSet};
 
@@ -31,7 +31,11 @@ async fn run_server(args: Args) -> Result<()> {
     while let Ok(mut peer) = factory.create_peer(args.advertise_ip, args.udp_port).await {
         join_set.spawn(async move {
             let (tx, _rx) = oneshot::channel::<()>();
-            let (channel_id_db, mut incoming_datachannel_message_receiver, outgoing_datachannel_message_sender) = peer.get_communication_data()?;
+            let (
+                channel_id_db,
+                mut incoming_datachannel_message_receiver,
+                outgoing_datachannel_message_sender,
+            ) = peer.get_communication_data()?;
             tokio::spawn(async move {
                 if let Err(e) = peer.run("server", tx).await {
                     println!("Peer failed with error {e}");

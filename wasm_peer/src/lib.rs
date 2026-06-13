@@ -173,7 +173,7 @@ impl WasmPeer {
 }
 
 impl WasmPeer {
-    pub fn take_received_messages(&self) -> Vec<DataChannelMessage>{
+    pub fn take_received_messages(&self) -> Vec<DataChannelMessage> {
         let mut msgs = self.inner.received_messages.borrow_mut();
         msgs.drain(..).collect()
     }
@@ -272,7 +272,10 @@ fn install_data_channel_handlers(inner: &Rc<Inner>, dc: &RtcDataChannel) -> Resu
         if let Ok(buf) = e.data().dyn_into::<js_sys::ArrayBuffer>() {
             let arr = Uint8Array::new(&buf);
             let out = arr.to_vec();
-            inner_for_msg.received_messages.borrow_mut().push(DataChannelMessage::Binary(out));
+            inner_for_msg
+                .received_messages
+                .borrow_mut()
+                .push(DataChannelMessage::Binary(out));
             return;
         }
 

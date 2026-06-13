@@ -1,18 +1,23 @@
 use anyhow::Result;
 use datachannel_socket_common::{DataChannelMessage, SignalMessage};
+use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender, unbounded};
 use futures_util::{
     SinkExt, StreamExt,
     stream::{SplitSink, SplitStream},
 };
-use futures::channel::mpsc::{ UnboundedSender, UnboundedReceiver, unbounded};
+use std::collections::HashSet;
+use std::io::ErrorKind;
+use std::sync::Arc;
 use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr},
     time::Instant,
 };
-use std::collections::HashSet;
-use std::io::ErrorKind;
-use std::sync::Arc;
-use str0m::{Candidate, Event, Input, Output, Rtc, RtcConfig, change::{SdpAnswer, SdpOffer, SdpPendingOffer}, channel::ChannelId, net::{Protocol, Receive}, IceConnectionState};
+use str0m::{
+    Candidate, Event, IceConnectionState, Input, Output, Rtc, RtcConfig,
+    change::{SdpAnswer, SdpOffer, SdpPendingOffer},
+    channel::ChannelId,
+    net::{Protocol, Receive},
+};
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::TcpListener,
@@ -96,11 +101,15 @@ where
 }
 
 #[derive(Clone)]
-pub struct ChannelIdDb { inner: Arc<tokio::sync::Mutex<HashSet<ChannelId>>>}
+pub struct ChannelIdDb {
+    inner: Arc<tokio::sync::Mutex<HashSet<ChannelId>>>,
+}
 
 impl ChannelIdDb {
     pub fn new() -> Self {
-        Self { inner: Arc::new(tokio::sync::Mutex::new(HashSet::new())) }
+        Self {
+            inner: Arc::new(tokio::sync::Mutex::new(HashSet::new())),
+        }
     }
 
     pub async fn get(&self, id: ChannelId) -> Option<ChannelId> {
@@ -117,7 +126,7 @@ impl ChannelIdDb {
     }
 
     // only NativePeer has permission to insert or remove
-    async fn remove(&self, id: ChannelId) -> bool{
+    async fn remove(&self, id: ChannelId) -> bool {
         self.inner.lock().await.remove(&id)
     }
 }
@@ -131,10 +140,11 @@ pub struct NativePeer {
     channel_id_db: ChannelIdDb,
     incoming_datachannel_message_sender: UnboundedSender<(ChannelId, DataChannelMessage)>,
     // we want to let client api take the receiver so clients can read what's come in
-    incoming_datachannel_message_receiver: Option<UnboundedReceiver<(ChannelId, DataChannelMessage)>>,
+    incoming_datachannel_message_receiver:
+        Option<UnboundedReceiver<(ChannelId, DataChannelMessage)>>,
     // we can clone this and give it to the user before the native peer starts running for real
     outgoing_datachannel_message_sender: UnboundedSender<(ChannelId, DataChannelMessage)>,
-    outgoing_datachannel_message_receiver: UnboundedReceiver<(ChannelId, DataChannelMessage)>
+    outgoing_datachannel_message_receiver: UnboundedReceiver<(ChannelId, DataChannelMessage)>,
 }
 
 impl NativePeer {
@@ -152,8 +162,10 @@ impl NativePeer {
         let candidate = Candidate::host(advertised_addr, "udp")
             .map_err(|e| std::io::Error::other(e.to_string()))?;
 
-        let (incoming_datachannel_message_sender, incoming_datachannel_message_receiver) = unbounded();
-        let (outgoing_datachannel_message_sender, outgoing_datachannel_message_receiver) = unbounded();
+        let (incoming_datachannel_message_sender, incoming_datachannel_message_receiver) =
+            unbounded();
+        let (outgoing_datachannel_message_sender, outgoing_datachannel_message_receiver) =
+            unbounded();
 
         let mut peer = Self {
             rtc,
@@ -173,17 +185,32 @@ impl NativePeer {
         Ok(peer)
     }
 
-    pub fn get_communication_data(&mut self) -> Result<(ChannelIdDb, UnboundedReceiver<(ChannelId, DataChannelMessage)>, UnboundedSender<(ChannelId, DataChannelMessage)>), std::io::Error> {
-        let incoming_datachannel_message_receiver =  self.incoming_datachannel_message_receiver.take().ok_or(std::io::Error::new(ErrorKind::NotConnected, "RTC not connected"))?;
-        Ok((self.channel_id_db.clone(), incoming_datachannel_message_receiver, self.outgoing_datachannel_message_sender.clone()))
+    pub fn get_communication_data(
+        &mut self,
+    ) -> Result<
+        (
+            ChannelIdDb,
+            UnboundedReceiver<(ChannelId, DataChannelMessage)>,
+            UnboundedSender<(ChannelId, DataChannelMessage)>,
+        ),
+        std::io::Error,
+    > {
+        let incoming_datachannel_message_receiver = self
+            .incoming_datachannel_message_receiver
+            .take()
+            .ok_or(std::io::Error::new(
+                ErrorKind::NotConnected,
+                "RTC not connected",
+            ))?;
+        Ok((
+            self.channel_id_db.clone(),
+            incoming_datachannel_message_receiver,
+            self.outgoing_datachannel_message_sender.clone(),
+        ))
     }
 
     // once this runs, we won't be able to access any channel receivers or channel data, so we need to get it beforehand
-    pub async fn run(
-        &mut self,
-        peer_name: &str,
-        done_tx: oneshot::Sender<()>,
-    ) -> Result<()> {
+    pub async fn run(&mut self, peer_name: &str, done_tx: oneshot::Sender<()>) -> Result<()> {
         let mut buf = vec![0u8; 65535];
 
         'rtc_loop: loop {
@@ -200,8 +227,7 @@ impl NativePeer {
                         Event::IceConnectionStateChange(state) => {
                             println!("{peer_name}: event: IceConnectionStateChange({state:?})");
 
-                            if state == IceConnectionState::Disconnected
-                            {
+                            if state == IceConnectionState::Disconnected {
                                 println!(
                                     "{peer_name}: ending session after terminal ICE state {state:?}"
                                 );
@@ -215,13 +241,20 @@ impl NativePeer {
                         }
                         Event::ChannelData(data) => {
                             let data_as_string = String::from_utf8_lossy(&data.data);
-                            println!(
-                                "{peer_name}: got data: {data_as_string:?}"
-                            );
+                            println!("{peer_name}: got data: {data_as_string:?}");
                             if data.binary {
-                                let _ = self.incoming_datachannel_message_sender.send((data.id, DataChannelMessage::Binary(data.data))).await;
+                                let _ = self
+                                    .incoming_datachannel_message_sender
+                                    .send((data.id, DataChannelMessage::Binary(data.data)))
+                                    .await;
                             } else {
-                                let _ = self.incoming_datachannel_message_sender.send((data.id, DataChannelMessage::Text(data_as_string.parse()?))).await;
+                                let _ = self
+                                    .incoming_datachannel_message_sender
+                                    .send((
+                                        data.id,
+                                        DataChannelMessage::Text(data_as_string.parse()?),
+                                    ))
+                                    .await;
                             }
                         }
                         Event::ChannelClose(cid) => {
