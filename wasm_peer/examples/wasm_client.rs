@@ -1,4 +1,3 @@
-use datachannel_socket_common::PeerFactory;
 use datachannel_socket_wasm_peer::{WasmPeerFactory, peer_log};
 use gloo_timers::future::TimeoutFuture;
 use wasm_bindgen::JsCast;
@@ -8,7 +7,7 @@ use web_sys::{HtmlElement, HtmlInputElement};
 
 fn connect_to_server(server_address: String) {
     spawn_local(async move {
-        let factory = WasmPeerFactory::new(());
+        let factory = WasmPeerFactory::new();
         let wasm_peer = factory
             .create_peer(server_address)
             .await

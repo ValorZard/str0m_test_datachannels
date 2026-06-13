@@ -1,6 +1,5 @@
 use anyhow::Result;
 use clap::Parser;
-use datachannel_socket_common::PeerFactory;
 use datachannel_socket_native_peer::{NativeClientPeerFactory, RoleAction};
 use tokio::sync::oneshot;
 
@@ -19,10 +18,10 @@ struct Args {
 async fn run_client(args: &Args) -> Result<()> {
     // HAS TO BE RUN BEFORE WEBRTC STUFF RUNS
     let server_addr = &args.server_addr;
-    let peer_factory = NativeClientPeerFactory::new(());
+    let peer_factory = NativeClientPeerFactory::new();
 
     let mut peer = peer_factory
-        .create_peer((server_addr.clone(), args.udp_port))
+        .create_peer(server_addr.clone(), args.udp_port)
         .await?;
 
     let (tx, rx) = oneshot::channel::<Vec<u8>>();

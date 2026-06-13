@@ -1,5 +1,5 @@
 use anyhow::Result;
-use datachannel_socket_common::{Peer, PeerFactory, SignalMessage};
+use datachannel_socket_common::{SignalMessage};
 use futures_util::{SinkExt, StreamExt};
 use gloo_timers::future::TimeoutFuture;
 use js_sys::Uint8Array;
@@ -74,6 +74,60 @@ impl WasmPeer {
         Ok(WasmPeer { inner })
     }
 
+    pub async fn create_offer(&mut self, channel_label: &str) -> Result<String, JsValue> {
+        // first create an internal data channel to initalize the peer connection
+        let dc = self.inner.pc.create_data_channel(channel_label);
+        install_data_channel_handlers(&self.inner, &dc)?;
+        self.inner.data_channel.replace(Some(dc));
+
+        let offer_val = JsFuture::from(self.inner.pc.create_offer()).await?;
+        let offer: RtcSessionDescriptionInit = offer_val.unchecked_into();
+
+        JsFuture::from(self.inner.pc.set_local_description(&offer)).await?;
+
+        // since we are connected to a public IP, we don't need to actually send ICE candidates,
+        // but we do it to make firefox happy
+        loop {
+            peer_log!("{:?}", self.inner.pc.ice_gathering_state());
+            if self.inner.pc.ice_gathering_state() == web_sys::RtcIceGatheringState::Complete {
+                break;
+            }
+            TimeoutFuture::new(50).await;
+        }
+
+        let local = self
+            .inner
+            .pc
+            .local_description()
+            .ok_or_else(|| JsValue::from_str("missing local description"))?;
+        peer_log!("local description after gathering: {:?}", local.sdp());
+        Ok(local.sdp())
+    }
+
+    pub async fn accept_offer(&mut self, sdp_offer: &str) -> Result<String, JsValue> {
+        let remote = RtcSessionDescriptionInit::new(RtcSdpType::Offer);
+        remote.set_sdp(sdp_offer);
+
+        JsFuture::from(self.inner.pc.set_remote_description(&remote)).await?;
+
+        let answer_val = JsFuture::from(self.inner.pc.create_answer()).await?;
+        let answer: RtcSessionDescriptionInit = answer_val.unchecked_into();
+
+        JsFuture::from(self.inner.pc.set_local_description(&answer)).await?;
+
+        answer
+            .get_sdp()
+            .ok_or_else(|| JsValue::from_str("missing answer SDP"))
+    }
+
+    pub async fn accept_answer(&mut self, sdp_answer: &str) -> Result<(), JsValue> {
+        let remote = RtcSessionDescriptionInit::new(RtcSdpType::Answer);
+        remote.set_sdp(sdp_answer);
+
+        JsFuture::from(self.inner.pc.set_remote_description(&remote)).await?;
+        Ok(())
+    }
+
     pub fn send_text(&self, text: String) -> Result<(), JsValue> {
         if *self.inner.is_data_channel_open.borrow() {
             let dc = self
@@ -127,64 +181,6 @@ impl WasmPeer {
 
     pub fn close(&self) {
         self.inner.pc.close();
-    }
-}
-
-impl Peer for WasmPeer {
-    type Error = JsValue;
-
-    async fn create_offer(&mut self, channel_label: &str) -> Result<String, JsValue> {
-        // first create an internal data channel to initalize the peer connection
-        let dc = self.inner.pc.create_data_channel(channel_label);
-        install_data_channel_handlers(&self.inner, &dc)?;
-        self.inner.data_channel.replace(Some(dc));
-
-        let offer_val = JsFuture::from(self.inner.pc.create_offer()).await?;
-        let offer: RtcSessionDescriptionInit = offer_val.unchecked_into();
-
-        JsFuture::from(self.inner.pc.set_local_description(&offer)).await?;
-
-        // since we are connected to a public IP, we don't need to actually send ICE candidates,
-        // but we do it to make firefox happy
-        loop {
-            peer_log!("{:?}", self.inner.pc.ice_gathering_state());
-            if self.inner.pc.ice_gathering_state() == web_sys::RtcIceGatheringState::Complete {
-                break;
-            }
-            TimeoutFuture::new(50).await;
-        }
-
-        let local = self
-            .inner
-            .pc
-            .local_description()
-            .ok_or_else(|| JsValue::from_str("missing local description"))?;
-        peer_log!("local description after gathering: {:?}", local.sdp());
-        Ok(local.sdp())
-    }
-
-    async fn accept_offer(&mut self, sdp_offer: &str) -> Result<String, JsValue> {
-        let remote = RtcSessionDescriptionInit::new(RtcSdpType::Offer);
-        remote.set_sdp(sdp_offer);
-
-        JsFuture::from(self.inner.pc.set_remote_description(&remote)).await?;
-
-        let answer_val = JsFuture::from(self.inner.pc.create_answer()).await?;
-        let answer: RtcSessionDescriptionInit = answer_val.unchecked_into();
-
-        JsFuture::from(self.inner.pc.set_local_description(&answer)).await?;
-
-        answer
-            .get_sdp()
-            .ok_or_else(|| JsValue::from_str("missing answer SDP"))
-    }
-
-    async fn accept_answer(&mut self, sdp_answer: &str) -> Result<(), JsValue> {
-        let remote = RtcSessionDescriptionInit::new(RtcSdpType::Answer);
-        remote.set_sdp(sdp_answer);
-
-        JsFuture::from(self.inner.pc.set_remote_description(&remote)).await?;
-        Ok(())
     }
 }
 
@@ -296,21 +292,12 @@ fn install_data_channel_handlers(inner: &Rc<Inner>, dc: &RtcDataChannel) -> Resu
 
 pub struct WasmPeerFactory {}
 
-impl PeerFactory for WasmPeerFactory {
-    type Error = JsValue;
-
-    type PeerType = WasmPeer;
-
-    // should be address to the signaling server
-    type CreateArgs = String;
-
-    type FactoryArgs = ();
-
-    fn new(_: Self::FactoryArgs) -> Self {
+impl WasmPeerFactory {
+    pub fn new() -> Self {
         Self {}
     }
 
-    async fn create_peer(&self, server_address: Self::CreateArgs) -> Result<WasmPeer, Self::Error> {
+    pub async fn create_peer(&self, server_address: String) -> Result<WasmPeer, JsValue> {
         let mut wasm_peer = WasmPeer::new()?;
 
         let (ws, wsio) = match WsMeta::connect(server_address.clone(), None).await {

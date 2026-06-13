@@ -2,7 +2,6 @@ use std::net::IpAddr;
 
 use anyhow::Result;
 use clap::Parser;
-use datachannel_socket_common::PeerFactory;
 use datachannel_socket_native_peer::{NativeServerPeerFactory, RoleAction};
 
 use tokio::{net::TcpListener, sync::oneshot, task::JoinSet};
@@ -30,7 +29,7 @@ async fn run_server(args: Args) -> Result<()> {
 
     let mut join_set = JoinSet::new();
     while let Ok(mut peer) = factory
-        .create_peer((args.advertise_ip, args.udp_port))
+        .create_peer(args.advertise_ip, args.udp_port)
         .await
     {
         join_set.spawn(async move {

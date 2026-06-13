@@ -1,5 +1,5 @@
 use anyhow::Result;
-use datachannel_socket_common::{Peer, PeerFactory, SignalMessage};
+use datachannel_socket_common::{SignalMessage};
 use futures_util::{
     SinkExt, StreamExt,
     stream::{SplitSink, SplitStream},
@@ -268,12 +268,8 @@ impl NativePeer {
             }
         }
     }
-}
 
-impl Peer for NativePeer {
-    type Error = std::io::Error;
-
-    async fn create_offer(
+    pub async fn create_offer(
         &mut self,
         channel_label: &str,
     ) -> std::result::Result<String, std::io::Error> {
@@ -286,7 +282,7 @@ impl Peer for NativePeer {
         Ok(offer.to_sdp_string())
     }
 
-    async fn accept_offer(
+    pub async fn accept_offer(
         &mut self,
         sdp_offer: &str,
     ) -> std::result::Result<String, std::io::Error> {
@@ -300,7 +296,7 @@ impl Peer for NativePeer {
         Ok(answer.to_sdp_string())
     }
 
-    async fn accept_answer(&mut self, sdp_answer: &str) -> std::result::Result<(), std::io::Error> {
+    pub async fn accept_answer(&mut self, sdp_answer: &str) -> std::result::Result<(), std::io::Error> {
         let pending = self
             .pending_offer
             .take()
@@ -318,21 +314,13 @@ impl Peer for NativePeer {
 pub struct NativeClientPeerFactory {}
 
 // native
-impl PeerFactory for NativeClientPeerFactory {
-    type Error = std::io::Error;
-    type PeerType = NativePeer;
-    // String is url to signaling server, u16 is what port the client is connecting to the server peer with.
-    type CreateArgs = (String, u16);
-    type FactoryArgs = ();
-
-    fn new(_: Self::FactoryArgs) -> Self {
+impl NativeClientPeerFactory {
+    pub fn new() -> Self {
         str0m::crypto::from_feature_flags().install_process_default();
         Self {}
     }
 
-    async fn create_peer(&self, args: Self::CreateArgs) -> Result<Self::PeerType, Self::Error> {
-        let signaling_server_addr = args.0;
-        let udp_port = args.1;
+    pub async fn create_peer(&self, signaling_server_addr: String, udp_port: u16) -> Result<NativePeer, std::io::Error> {
         // because the server is already advertising it's public IP, we don't actually need to put in the work to find our own IP
         // so we can put whatever we want here since the "server" peer will be able to directly connect anyways.
         let advertised_addr = validate_advertised_addr(IpAddr::V4(Ipv4Addr::LOCALHOST), udp_port)
@@ -371,21 +359,15 @@ pub struct NativeServerPeerFactory {
     tcp_listener: TcpListener,
 }
 
-impl PeerFactory for NativeServerPeerFactory {
-    type Error = std::io::Error;
-    type PeerType = NativePeer;
-    type FactoryArgs = TcpListener;
-    // The IpAddr is the advertised IP (which should be the server's public internet IP), and the u16 is the port it will try to listen on.
-    type CreateArgs = (IpAddr, u16);
-
-    fn new(args: Self::FactoryArgs) -> Self {
-        Self { tcp_listener: args }
+impl NativeServerPeerFactory {
+    pub fn new(tcp_listener: TcpListener) -> Self {
+        Self { tcp_listener}
     }
 
-    async fn create_peer(&self, args: Self::CreateArgs) -> Result<Self::PeerType, Self::Error> {
+    pub async fn create_peer(&self, advertised_ip: IpAddr, port: u16) -> Result<NativePeer, std::io::Error> {
         let (raw_stream, addr) = self.tcp_listener.accept().await?;
         // this is only really necessary if you are testing server and client on same machine
-        let advertise_addr = validate_advertised_addr(args.0, args.1)
+        let advertise_addr = validate_advertised_addr(advertised_ip, port)
             .ok_or(std::io::Error::other("Failed to generate address"))?;
         println!("Advertising server on '{advertise_addr}'");
         println!(
