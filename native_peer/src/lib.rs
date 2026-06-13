@@ -1,5 +1,7 @@
 use anyhow::Result;
-use datachannel_socket_common::{ChannelRef, DataChannelMessage, SignalMessage, WebRTCCommunicationHandle, WebRTCNotification};
+use datachannel_socket_common::{
+    ChannelRef, DataChannelMessage, SignalMessage, WebRTCCommunicationHandle, WebRTCNotification,
+};
 use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender, unbounded};
 use futures_util::{
     SinkExt, StreamExt,
@@ -123,8 +125,13 @@ impl ChannelMap {
     }
 
     fn add_channel(&mut self, rtc: &mut Rtc, channel_id: ChannelId) -> Option<ChannelRef> {
-        if let Some(ch) = rtc.channel(channel_id) && let Some(config) = ch.config() {
-            let channel_ref = ChannelRef {label: config.label.clone(), id_hint: config.negotiated};
+        if let Some(ch) = rtc.channel(channel_id)
+            && let Some(config) = ch.config()
+        {
+            let channel_ref = ChannelRef {
+                label: config.label.clone(),
+                id_hint: config.negotiated,
+            };
             self.id_to_ref.insert(channel_id, channel_ref.clone());
             self.ref_to_id.insert(channel_ref.clone(), channel_id);
             Some(channel_ref)
@@ -203,11 +210,14 @@ impl NativePeer {
 
     pub fn get_communication_handle(
         &mut self,
-    ) -> Result<WebRTCCommunicationHandle,std::io::Error> {
-        let webrtc_notification_receiver = self.webrtc_notification_receiver.take().ok_or(std::io::Error::new(
-            ErrorKind::AlreadyExists,
-            "WebRTC Channel receiver already sent out",
-        ))?;
+    ) -> Result<WebRTCCommunicationHandle, std::io::Error> {
+        let webrtc_notification_receiver =
+            self.webrtc_notification_receiver
+                .take()
+                .ok_or(std::io::Error::new(
+                    ErrorKind::AlreadyExists,
+                    "WebRTC Channel receiver already sent out",
+                ))?;
         let incoming_datachannel_message_receiver = self
             .incoming_datachannel_message_receiver
             .take()
@@ -215,7 +225,11 @@ impl NativePeer {
                 ErrorKind::AlreadyExists,
                 "Incoming Channel receiver already sent out",
             ))?;
-        Ok(WebRTCCommunicationHandle::new(webrtc_notification_receiver, incoming_datachannel_message_receiver, self.outgoing_datachannel_message_sender.clone()))
+        Ok(WebRTCCommunicationHandle::new(
+            webrtc_notification_receiver,
+            incoming_datachannel_message_receiver,
+            self.outgoing_datachannel_message_sender.clone(),
+        ))
     }
 
     // once this runs, we won't be able to access any channel receivers or channel data, so we need to get it beforehand
@@ -246,13 +260,23 @@ impl NativePeer {
                         }
                         Event::ChannelOpen(cid, label) => {
                             println!("{peer_name}: channel open: {label:?}");
-                            let channel_ref = self.channel_map.add_channel(&mut self.rtc, cid).expect("channel should be open");
-                            let _ = self.webrtc_notification_sender.send(WebRTCNotification::ChannelOpen(channel_ref)).await;
+                            let channel_ref = self
+                                .channel_map
+                                .add_channel(&mut self.rtc, cid)
+                                .expect("channel should be open");
+                            let _ = self
+                                .webrtc_notification_sender
+                                .send(WebRTCNotification::ChannelOpen(channel_ref))
+                                .await;
                         }
                         Event::ChannelData(data) => {
                             let data_as_string = String::from_utf8_lossy(&data.data);
                             println!("{peer_name}: got data: {data_as_string:?}");
-                            let channel_ref = self.channel_map.get_ref_of_id(&data.id).expect("channel should exist").clone();
+                            let channel_ref = self
+                                .channel_map
+                                .get_ref_of_id(&data.id)
+                                .expect("channel should exist")
+                                .clone();
                             if data.binary {
                                 let _ = self
                                     .incoming_datachannel_message_sender

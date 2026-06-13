@@ -44,8 +44,14 @@ async fn run_client(args: &Args) -> Result<()> {
     }
 
     for channel_ref in channels {
-        let _ = communication_handle.send_datachannel_message(channel_ref.clone(),  DataChannelMessage::Text("Hello from native client!".into()));
-        let _ = communication_handle.send_datachannel_message(channel_ref,  DataChannelMessage::Binary("Hello from native client in binary!".into()));
+        let _ = communication_handle.send_datachannel_message(
+            channel_ref.clone(),
+            DataChannelMessage::Text("Hello from native client!".into()),
+        );
+        let _ = communication_handle.send_datachannel_message(
+            channel_ref,
+            DataChannelMessage::Binary("Hello from native client in binary!".into()),
+        );
     }
 
     while let Ok((channel_ref, message)) = communication_handle.recv_datachannel_message().await {

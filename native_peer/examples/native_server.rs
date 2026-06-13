@@ -4,8 +4,8 @@ use anyhow::Result;
 use clap::Parser;
 use datachannel_socket_native_peer::NativeServerPeerFactory;
 
-use tokio::{net::TcpListener, sync::oneshot, task::JoinSet};
 use datachannel_socket_common::DataChannelMessage;
+use tokio::{net::TcpListener, sync::oneshot, task::JoinSet};
 
 #[derive(Debug, Parser)]
 struct Args {
@@ -38,9 +38,11 @@ async fn run_server(args: Args) -> Result<()> {
                     println!("Peer failed with error {e}");
                 }
             });
-            while let Ok((channel_ref, message)) = communication_handle.recv_datachannel_message().await {
+            while let Ok((channel_ref, message)) =
+                communication_handle.recv_datachannel_message().await
+            {
                 println!("From {channel_ref:?} Received incoming datachannel message: {message:?}");
-                let _ = communication_handle.send_datachannel_message(channel_ref,  message);
+                let _ = communication_handle.send_datachannel_message(channel_ref, message);
             }
             Ok(())
         });
