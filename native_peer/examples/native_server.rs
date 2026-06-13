@@ -41,12 +41,8 @@ async fn run_server(args: Args) -> Result<()> {
                     println!("Peer failed with error {e}");
                 }
             });
-            let mut echo_messages = Vec::new();
-            for message in incoming_datachannel_message_receiver.recv().await {
+            while let Ok(message) = incoming_datachannel_message_receiver.recv().await {
                 println!("Received incoming datachannel message: {:?}", message);
-                echo_messages.push(message);
-            }
-            for message in echo_messages {
                 outgoing_datachannel_message_sender.unbounded_send(message)?;
             }
             Ok(())

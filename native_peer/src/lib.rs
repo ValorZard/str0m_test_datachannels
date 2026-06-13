@@ -270,25 +270,6 @@ impl NativePeer {
                 tokio::task::yield_now().await;
             };
 
-            // TODO: this is an extremely bad idea, since we really want both send and recv happening at the same time
-            // figure out a better way to do this
-            // we want this to be try_recv since otherwise this task will block on the await
-            while let Ok((cid, msg)) = self.outgoing_datachannel_message_receiver.try_recv() {
-                if let Some(mut ch) = self.rtc.channel(cid) {
-                    println!("{peer_name}: sending message {msg:?} to {cid:?}");
-                    match msg {
-                        DataChannelMessage::Text(text) => {
-                            ch.write(false, text.as_bytes())?;
-                        }
-                        DataChannelMessage::Binary(binary) => {
-                            ch.write(true, binary.as_slice())?;
-                        }
-                    }
-                }
-                // since this is a loop, lets allow for yielding
-                tokio::task::yield_now().await;
-            }
-
             let wait = next_timeout.saturating_duration_since(Instant::now());
             let sleep = tokio::time::sleep(wait);
 
@@ -309,6 +290,21 @@ impl NativePeer {
                             self.rtc.handle_input(Input::Timeout(Instant::now()))?;
                         }
                         Err(e) => return Err(e.into()),
+                    }
+                }
+                // TODO: Is this fine? Or should we put this in a while loop before the select?
+                msg = self.outgoing_datachannel_message_receiver.recv() => {
+                    if let Ok((cid, msg)) = msg {
+                        if let Some(mut ch) = self.rtc.channel(cid) {
+                            match msg {
+                                DataChannelMessage::Text(text) => {
+                                    ch.write(false, text.as_bytes())?;
+                                }
+                                DataChannelMessage::Binary(binary) => {
+                                    ch.write(true, binary.as_slice())?;
+                                }
+                            }
+                        }
                     }
                 }
                 _ = sleep => {

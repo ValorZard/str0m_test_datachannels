@@ -45,9 +45,14 @@ async fn run_client(args: &Args) -> Result<()> {
             channel,
             DataChannelMessage::Text("Hello from native client!".into()),
         ))?;
+
+        outgoing_datachannel_message_sender.unbounded_send((
+            channel,
+            DataChannelMessage::Binary("Hello from native client in binary!".into()),
+        ))?;
     }
 
-    for message in incoming_datachannel_message_receiver.recv().await {
+    while let Ok(message) = incoming_datachannel_message_receiver.recv().await {
         println!("Received incoming datachannel message: {:?}", message);
     }
 
