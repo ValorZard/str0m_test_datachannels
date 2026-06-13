@@ -16,7 +16,7 @@ fn connect_to_server(server_address: String) {
         // send until its open
         loop {
             if let Ok(_) = wasm_peer.send_text("Hello from WASM!".to_string()) {
-                if let Ok(_) = wasm_peer.send_bytes(vec![0,1,3,4,5,63,5,67,42,69]) {
+                if let Ok(_) = wasm_peer.send_bytes(vec![0, 1, 3, 4, 5, 63, 5, 67, 42, 69]) {
                     peer_log!("Success with bytes");
                 }
                 peer_log!("Success");

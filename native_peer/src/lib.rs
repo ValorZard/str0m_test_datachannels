@@ -1,5 +1,5 @@
 use anyhow::Result;
-use datachannel_socket_common::{SignalMessage};
+use datachannel_socket_common::SignalMessage;
 use futures_util::{
     SinkExt, StreamExt,
     stream::{SplitSink, SplitStream},
@@ -296,7 +296,10 @@ impl NativePeer {
         Ok(answer.to_sdp_string())
     }
 
-    pub async fn accept_answer(&mut self, sdp_answer: &str) -> std::result::Result<(), std::io::Error> {
+    pub async fn accept_answer(
+        &mut self,
+        sdp_answer: &str,
+    ) -> std::result::Result<(), std::io::Error> {
         let pending = self
             .pending_offer
             .take()
@@ -320,7 +323,11 @@ impl NativeClientPeerFactory {
         Self {}
     }
 
-    pub async fn create_peer(&self, signaling_server_addr: String, udp_port: u16) -> Result<NativePeer, std::io::Error> {
+    pub async fn create_peer(
+        &self,
+        signaling_server_addr: String,
+        udp_port: u16,
+    ) -> Result<NativePeer, std::io::Error> {
         // because the server is already advertising it's public IP, we don't actually need to put in the work to find our own IP
         // so we can put whatever we want here since the "server" peer will be able to directly connect anyways.
         let advertised_addr = validate_advertised_addr(IpAddr::V4(Ipv4Addr::LOCALHOST), udp_port)
@@ -361,10 +368,14 @@ pub struct NativeServerPeerFactory {
 
 impl NativeServerPeerFactory {
     pub fn new(tcp_listener: TcpListener) -> Self {
-        Self { tcp_listener}
+        Self { tcp_listener }
     }
 
-    pub async fn create_peer(&self, advertised_ip: IpAddr, port: u16) -> Result<NativePeer, std::io::Error> {
+    pub async fn create_peer(
+        &self,
+        advertised_ip: IpAddr,
+        port: u16,
+    ) -> Result<NativePeer, std::io::Error> {
         let (raw_stream, addr) = self.tcp_listener.accept().await?;
         // this is only really necessary if you are testing server and client on same machine
         let advertise_addr = validate_advertised_addr(advertised_ip, port)

@@ -28,10 +28,7 @@ async fn run_server(args: Args) -> Result<()> {
     let factory = NativeServerPeerFactory::new(listener);
 
     let mut join_set = JoinSet::new();
-    while let Ok(mut peer) = factory
-        .create_peer(args.advertise_ip, args.udp_port)
-        .await
-    {
+    while let Ok(mut peer) = factory.create_peer(args.advertise_ip, args.udp_port).await {
         join_set.spawn(async move {
             let (tx, _rx) = oneshot::channel::<Vec<u8>>();
             if let Err(e) = peer.run("server", RoleAction::EchoServer, tx).await {
