@@ -1,5 +1,5 @@
 use anyhow::Result;
-use datachannel_socket_common::SignalMessage;
+use datachannel_socket_common::{DataChannelMessage, SignalMessage};
 use futures_util::{SinkExt, StreamExt};
 use gloo_timers::future::TimeoutFuture;
 use js_sys::Uint8Array;
@@ -36,7 +36,7 @@ struct Inner {
     data_channel: RefCell<Option<RtcDataChannel>>,
     is_data_channel_open: RefCell<bool>,
     pending_local_ice: RefCell<Vec<IceCandidateMessage>>,
-    received_messages: RefCell<Vec<Vec<u8>>>,
+    received_messages: RefCell<Vec<DataChannelMessage>>,
 
     on_ice_candidate: OnceCell<Closure<dyn FnMut(RtcPeerConnectionIceEvent)>>,
     on_ice_connection_state_change: OnceCell<Closure<dyn FnMut(Event)>>,
@@ -159,19 +159,6 @@ impl WasmPeer {
         Err(JsValue::from_str("Data channel hasn't initialized yet!"))
     }
 
-    pub fn take_received_messages(&self) -> Result<String, JsValue> {
-        let mut msgs = self.inner.received_messages.borrow_mut();
-        let rendered: Vec<String> = msgs
-            .iter()
-            .map(|m| String::from_utf8_lossy(m).to_string())
-            .collect();
-
-        let out = serde_json::to_string(&rendered)
-            .map_err(|e| JsValue::from_str(&format!("serialize received messages: {e}")))?;
-        msgs.clear();
-        Ok(out)
-    }
-
     pub fn ice_connection_state(&self) -> RtcIceConnectionState {
         self.inner.pc.ice_connection_state()
     }
@@ -182,6 +169,13 @@ impl WasmPeer {
 
     pub fn close(&self) {
         self.inner.pc.close();
+    }
+}
+
+impl WasmPeer {
+    pub fn take_received_messages(&self) -> Vec<DataChannelMessage>{
+        let mut msgs = self.inner.received_messages.borrow_mut();
+        msgs.drain(..).collect()
     }
 }
 
@@ -271,15 +265,14 @@ fn install_data_channel_handlers(inner: &Rc<Inner>, dc: &RtcDataChannel) -> Resu
             inner_for_msg
                 .received_messages
                 .borrow_mut()
-                .push(text.into_bytes());
+                .push(DataChannelMessage::Text(text));
             return;
         }
 
         if let Ok(buf) = e.data().dyn_into::<js_sys::ArrayBuffer>() {
             let arr = Uint8Array::new(&buf);
-            let mut out = vec![0u8; arr.length() as usize];
-            arr.copy_to(&mut out);
-            inner_for_msg.received_messages.borrow_mut().push(out);
+            let out = arr.to_vec();
+            inner_for_msg.received_messages.borrow_mut().push(DataChannelMessage::Binary(out));
             return;
         }
 

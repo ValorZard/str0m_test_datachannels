@@ -27,8 +27,8 @@ fn connect_to_server(server_address: String) {
 
         // read messages coming in
         loop {
-            if let Ok(message) = wasm_peer.take_received_messages() {
-                peer_log!("Message from data channel: {message}");
+            for message in wasm_peer.take_received_messages() {
+                peer_log!("Message from data channel: {message:?}");
             }
             TimeoutFuture::new(50).await;
         }

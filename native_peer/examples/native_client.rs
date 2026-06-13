@@ -1,7 +1,9 @@
+use std::time::Duration;
 use anyhow::Result;
 use clap::Parser;
-use datachannel_socket_native_peer::{NativeClientPeerFactory, RoleAction};
+use datachannel_socket_native_peer::{NativeClientPeerFactory};
 use tokio::sync::oneshot;
+use datachannel_socket_common::DataChannelMessage;
 
 #[derive(Debug, Parser)]
 struct Args {
@@ -24,22 +26,28 @@ async fn run_client(args: &Args) -> Result<()> {
         .create_peer(server_addr.clone(), args.udp_port)
         .await?;
 
-    let (tx, rx) = oneshot::channel::<Vec<u8>>();
+    let (tx, rx) = oneshot::channel::<()>();
     let msg = args.message.as_bytes().to_vec();
 
+    let (channel_id_db, mut incoming_datachannel_message_receiver, outgoing_datachannel_message_sender) = peer.get_communication_data()?;
+
     tokio::spawn(async move {
-        match rx.await {
-            Ok(reply) => {
-                println!("client: echo reply = {:?}", String::from_utf8_lossy(&reply));
-            }
-            Err(e) => {
-                eprintln!("client: wait failed: {e}");
-            }
-        }
+        peer.run("client",  tx)
+            .await
     });
 
-    peer.run("client", RoleAction::ClientSendAndWait { message: msg }, tx)
-        .await
+    // TODO: Find a better way to tell if the client has started running
+    tokio::time::sleep(Duration::from_secs(1)).await;
+
+    for channel in channel_id_db.get_all().await {
+        outgoing_datachannel_message_sender.unbounded_send((channel, DataChannelMessage::Text("Hello from native client!".into())))?;
+    }
+
+    for message in incoming_datachannel_message_receiver.recv().await {
+        println!("Received incoming datachannel message: {:?}", message);
+    }
+
+    Ok(())
 }
 
 #[tokio::main]

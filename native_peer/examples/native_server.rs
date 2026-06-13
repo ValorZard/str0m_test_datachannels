@@ -2,7 +2,7 @@ use std::net::IpAddr;
 
 use anyhow::Result;
 use clap::Parser;
-use datachannel_socket_native_peer::{NativeServerPeerFactory, RoleAction};
+use datachannel_socket_native_peer::{NativeServerPeerFactory};
 
 use tokio::{net::TcpListener, sync::oneshot, task::JoinSet};
 
@@ -27,13 +27,25 @@ async fn run_server(args: Args) -> Result<()> {
     println!("server: signaling on {}:{}", args.bind_ip, args.signal_port);
     let factory = NativeServerPeerFactory::new(listener);
 
-    let mut join_set = JoinSet::new();
+    let mut join_set: JoinSet<Result<_>> = JoinSet::new();
     while let Ok(mut peer) = factory.create_peer(args.advertise_ip, args.udp_port).await {
         join_set.spawn(async move {
-            let (tx, _rx) = oneshot::channel::<Vec<u8>>();
-            if let Err(e) = peer.run("server", RoleAction::EchoServer, tx).await {
-                println!("Peer failed with error {e}");
+            let (tx, _rx) = oneshot::channel::<()>();
+            let (channel_id_db, mut incoming_datachannel_message_receiver, outgoing_datachannel_message_sender) = peer.get_communication_data()?;
+            tokio::spawn(async move {
+                if let Err(e) = peer.run("server", tx).await {
+                    println!("Peer failed with error {e}");
+                }
+            });
+            let mut echo_messages = Vec::new();
+            for message in incoming_datachannel_message_receiver.recv().await {
+                println!("Received incoming datachannel message: {:?}", message);
+                echo_messages.push(message);
             }
+            for message in echo_messages {
+                outgoing_datachannel_message_sender.unbounded_send(message)?;
+            }
+            Ok(())
         });
     }
 

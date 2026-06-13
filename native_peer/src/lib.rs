@@ -1,19 +1,18 @@
 use anyhow::Result;
-use datachannel_socket_common::SignalMessage;
+use datachannel_socket_common::{DataChannelMessage, SignalMessage};
 use futures_util::{
     SinkExt, StreamExt,
     stream::{SplitSink, SplitStream},
 };
+use futures::channel::mpsc::{ UnboundedSender, UnboundedReceiver, unbounded};
 use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr},
     time::Instant,
 };
-use str0m::{
-    Candidate, Event, Input, Output, Rtc, RtcConfig,
-    change::{SdpAnswer, SdpOffer, SdpPendingOffer},
-    channel::ChannelId,
-    net::{Protocol, Receive},
-};
+use std::collections::HashSet;
+use std::io::ErrorKind;
+use std::sync::Arc;
+use str0m::{Candidate, Event, Input, Output, Rtc, RtcConfig, change::{SdpAnswer, SdpOffer, SdpPendingOffer}, channel::ChannelId, net::{Protocol, Receive}, IceConnectionState};
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::TcpListener,
@@ -96,9 +95,31 @@ where
     }
 }
 
-pub enum RoleAction {
-    EchoServer,
-    ClientSendAndWait { message: Vec<u8> },
+#[derive(Clone)]
+pub struct ChannelIdDb { inner: Arc<tokio::sync::Mutex<HashSet<ChannelId>>>}
+
+impl ChannelIdDb {
+    pub fn new() -> Self {
+        Self { inner: Arc::new(tokio::sync::Mutex::new(HashSet::new())) }
+    }
+
+    pub async fn get(&self, id: ChannelId) -> Option<ChannelId> {
+        self.inner.lock().await.get(&id).cloned()
+    }
+
+    pub async fn get_all(&self) -> Vec<ChannelId> {
+        self.inner.lock().await.iter().cloned().collect()
+    }
+
+    // only NativePeer has permission to insert or remove
+    async fn insert(&self, id: ChannelId) -> bool {
+        self.inner.lock().await.insert(id)
+    }
+
+    // only NativePeer has permission to insert or remove
+    async fn remove(&self, id: ChannelId) -> bool{
+        self.inner.lock().await.remove(&id)
+    }
 }
 
 pub struct NativePeer {
@@ -107,6 +128,13 @@ pub struct NativePeer {
     pub bound_addr: SocketAddr,      // wildcard or actual socket bind
     pub advertised_addr: SocketAddr, // ICE candidate address exposed to peer
     pending_offer: Option<SdpPendingOffer>,
+    channel_id_db: ChannelIdDb,
+    incoming_datachannel_message_sender: UnboundedSender<(ChannelId, DataChannelMessage)>,
+    // we want to let client api take the receiver so clients can read what's come in
+    incoming_datachannel_message_receiver: Option<UnboundedReceiver<(ChannelId, DataChannelMessage)>>,
+    // we can clone this and give it to the user before the native peer starts running for real
+    outgoing_datachannel_message_sender: UnboundedSender<(ChannelId, DataChannelMessage)>,
+    outgoing_datachannel_message_receiver: UnboundedReceiver<(ChannelId, DataChannelMessage)>
 }
 
 impl NativePeer {
@@ -124,12 +152,20 @@ impl NativePeer {
         let candidate = Candidate::host(advertised_addr, "udp")
             .map_err(|e| std::io::Error::other(e.to_string()))?;
 
+        let (incoming_datachannel_message_sender, incoming_datachannel_message_receiver) = unbounded();
+        let (outgoing_datachannel_message_sender, outgoing_datachannel_message_receiver) = unbounded();
+
         let mut peer = Self {
             rtc,
             socket,
             bound_addr,
             advertised_addr,
             pending_offer: None,
+            channel_id_db: ChannelIdDb::new(),
+            incoming_datachannel_message_sender,
+            incoming_datachannel_message_receiver: Some(incoming_datachannel_message_receiver),
+            outgoing_datachannel_message_sender,
+            outgoing_datachannel_message_receiver,
         };
 
         peer.rtc.add_local_candidate(candidate);
@@ -137,19 +173,20 @@ impl NativePeer {
         Ok(peer)
     }
 
+    pub fn get_communication_data(&mut self) -> Result<(ChannelIdDb, UnboundedReceiver<(ChannelId, DataChannelMessage)>, UnboundedSender<(ChannelId, DataChannelMessage)>), std::io::Error> {
+        let incoming_datachannel_message_receiver =  self.incoming_datachannel_message_receiver.take().ok_or(std::io::Error::new(ErrorKind::NotConnected, "RTC not connected"))?;
+        Ok((self.channel_id_db.clone(), incoming_datachannel_message_receiver, self.outgoing_datachannel_message_sender.clone()))
+    }
+
+    // once this runs, we won't be able to access any channel receivers or channel data, so we need to get it beforehand
     pub async fn run(
         &mut self,
         peer_name: &str,
-        action: RoleAction,
-        done_tx: oneshot::Sender<Vec<u8>>,
+        done_tx: oneshot::Sender<()>,
     ) -> Result<()> {
         let mut buf = vec![0u8; 65535];
-        let mut channel_id: Option<ChannelId> = None;
-        let mut sent = false;
-        let mut done_tx = Some(done_tx);
-        let mut buffered_echo: Vec<(ChannelId, bool, Vec<u8>)> = Vec::new();
 
-        loop {
+        'rtc_loop: loop {
             let next_timeout = loop {
                 match self.rtc.poll_output()? {
                     Output::Timeout(t) => break t,
@@ -163,81 +200,60 @@ impl NativePeer {
                         Event::IceConnectionStateChange(state) => {
                             println!("{peer_name}: event: IceConnectionStateChange({state:?})");
 
-                            if matches!(&action, RoleAction::EchoServer)
-                                && matches!(
-                                    format!("{state:?}").as_str(),
-                                    "Disconnected" | "Failed" | "Closed"
-                                )
+                            if state == IceConnectionState::Disconnected
                             {
                                 println!(
                                     "{peer_name}: ending session after terminal ICE state {state:?}"
                                 );
+                                let _ = done_tx.send(());
                                 return Ok(());
                             }
                         }
                         Event::ChannelOpen(cid, label) => {
                             println!("{peer_name}: channel open: {label:?}");
-                            channel_id = Some(cid);
-
-                            if let RoleAction::EchoServer = action {
-                                for (id, binary, data) in std::mem::take(&mut buffered_echo) {
-                                    if let Some(mut ch) = self.rtc.channel(id) {
-                                        ch.write(binary, &data)?;
-                                    }
-                                }
-                            }
+                            self.channel_id_db.insert(cid).await;
                         }
                         Event::ChannelData(data) => {
+                            let data_as_string = String::from_utf8_lossy(&data.data);
                             println!(
-                                "{peer_name}: got data: {:?}",
-                                String::from_utf8_lossy(&data.data)
+                                "{peer_name}: got data: {data_as_string:?}"
                             );
-
-                            match &action {
-                                RoleAction::EchoServer => {
-                                    if channel_id == Some(data.id) {
-                                        if let Some(mut ch) = self.rtc.channel(data.id) {
-                                            ch.write(data.binary, &data.data)?;
-                                        }
-                                    } else {
-                                        buffered_echo.push((
-                                            data.id,
-                                            data.binary,
-                                            data.data.to_vec(),
-                                        ));
-                                    }
-                                }
-                                RoleAction::ClientSendAndWait { message } => {
-                                    if data.data == message.as_slice() {
-                                        if let Some(tx) = done_tx.take() {
-                                            let _ = tx.send(data.data.to_vec());
-                                        }
-                                        return Ok(());
-                                    }
-                                }
+                            if data.binary {
+                                let _ = self.incoming_datachannel_message_sender.send((data.id, DataChannelMessage::Binary(data.data))).await;
+                            } else {
+                                let _ = self.incoming_datachannel_message_sender.send((data.id, DataChannelMessage::Text(data_as_string.parse()?))).await;
                             }
+                        }
+                        Event::ChannelClose(cid) => {
+                            println!("{peer_name}: channel close: {cid:?}");
+                            self.channel_id_db.remove(cid).await;
                         }
                         other => {
                             println!("{peer_name}: event: {other:?}");
                         }
                     },
                 }
+                // since this is a loop, lets allow for yielding
+                tokio::task::yield_now().await;
             };
 
-            if let RoleAction::ClientSendAndWait { message } = &action {
-                if !sent {
-                    if let Some(cid) = channel_id {
-                        if let Some(mut ch) = self.rtc.channel(cid) {
-                            ch.write(false, message)?;
-                            println!(
-                                "{peer_name}: sent data: {:?}",
-                                String::from_utf8_lossy(message)
-                            );
-                            sent = true;
-                            continue;
+            // TODO: this is an extremely bad idea, since we really want both send and recv happening at the same time
+            // figure out a better way to do this
+            // we want this to be try_recv since otherwise this task will block on the await
+            while let Ok((cid, msg)) = self.outgoing_datachannel_message_receiver.try_recv() {
+                if let Some(mut ch) = self.rtc.channel(cid) {
+                    println!("{peer_name}: sending message {msg:?} to {cid:?}");
+                    match msg {
+                        DataChannelMessage::Text(text) => {
+                            ch.write(false, text.as_bytes())?;
+                        }
+                        DataChannelMessage::Binary(binary) => {
+                            ch.write(true, binary.as_slice())?;
                         }
                     }
                 }
+                // since this is a loop, lets allow for yielding
+                tokio::task::yield_now().await;
             }
 
             let wait = next_timeout.saturating_duration_since(Instant::now());
