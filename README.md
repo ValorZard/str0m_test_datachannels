@@ -55,6 +55,27 @@ This is because firefox doesn't like it when you connect to WebRTC using a loopb
 cargo run -p datachannel_socket_native_peer --example native_client  -- --server-addr "ws://127.0.0.1:7000"
 ```
 
+### Native transport benchmark (datachannel-socket vs tokio-tungstenite)
+
+Runs two local echo benchmarks in one process:
+
+- WebRTC datachannel using `datachannel_socket_native_peer`
+- WebSocket using `tokio-tungstenite`
+
+```bash
+cargo run -p datachannel_socket_native_peer --example native_transport_benchmark -- \
+    --messages 2000 \
+    --payload-bytes 512 \
+    --warmup-messages 200
+```
+
+Useful knobs:
+
+- `--messages`: number of timed request/response round-trips per transport
+- `--payload-bytes`: size of each payload used in both benchmarks
+- `--warmup-messages`: untimed warmup messages sent before measuring
+- `--signal-port`, `--server-udp-port`, `--client-udp-port`, `--ws-port`: change ports if there is a conflict
+
 ### WASM Client:
 You will need to have installed [trunk](https://github.com/trunk-rs/trunk).
 

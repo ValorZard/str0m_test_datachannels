@@ -271,7 +271,7 @@ impl NativePeer {
                         }
                         Event::ChannelData(data) => {
                             let data_as_string = String::from_utf8_lossy(&data.data);
-                            println!("{peer_name}: got data: {data_as_string:?}");
+                            //println!("{peer_name}: got data: {data_as_string:?}");
                             let channel_ref = self
                                 .channel_map
                                 .get_ref_of_id(&data.id)
@@ -297,7 +297,7 @@ impl NativePeer {
                             self.channel_map.remove_channel(cid);
                         }
                         other => {
-                            println!("{peer_name}: event: {other:?}");
+                            //println!("{peer_name}: event: {other:?}");
                         }
                     },
                 }
