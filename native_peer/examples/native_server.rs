@@ -1,10 +1,12 @@
-use std::net::IpAddr;
-
 use anyhow::Result;
 use clap::Parser;
-use datachannel_socket_native_peer::NativeServerPeerFactory;
+use datachannel_socket_native_peer::{NativePeer, NativeServerPeerFactory};
+use std::net::IpAddr;
+use std::sync::Arc;
 
-use datachannel_socket_common::DataChannelMessage;
+use datachannel_socket_common::{
+    DataChannelMessage, OutgoingDataChannelMessageSender, WebRTCCommunicationHandle,
+};
 use tokio::{net::TcpListener, sync::oneshot, task::JoinSet};
 
 #[derive(Debug, Parser)]
@@ -29,20 +31,33 @@ async fn run_server(args: Args) -> Result<()> {
     let factory = NativeServerPeerFactory::new(listener);
 
     let mut join_set: JoinSet<Result<_>> = JoinSet::new();
+    let peer_senders = Arc::new(tokio::sync::Mutex::new(Vec::<
+        OutgoingDataChannelMessageSender,
+    >::new()));
     while let Ok(mut peer) = factory.create_peer(args.advertise_ip, args.udp_port).await {
+        let mut peers_lock = peer_senders.lock().await;
+        let mut peer_communication_handle = peer.get_communication_handle()?;
+        peers_lock.push(peer_communication_handle.clone_datachannel_message_sender());
+        drop(peers_lock);
+        let peer_senders = peer_senders.clone();
         join_set.spawn(async move {
             let (tx, _rx) = oneshot::channel::<()>();
-            let mut communication_handle = peer.get_communication_handle()?;
             tokio::spawn(async move {
                 if let Err(e) = peer.run("server", tx).await {
                     println!("Peer failed with error {e}");
                 }
             });
             while let Ok((channel_ref, message)) =
-                communication_handle.recv_datachannel_message().await
+                peer_communication_handle.recv_datachannel_message().await
             {
                 println!("From {channel_ref:?} Received incoming datachannel message: {message:?}");
-                let _ = communication_handle.send_datachannel_message(channel_ref, message);
+                let peer_senders = peer_senders.lock().await;
+                for sender in peer_senders.iter() {
+                    // TODO: Add channel id safety here, or some way to get the list of channels available in CommunicationHandle
+                    // we can just send to another channel with the exact same ref in another peer, but watch out!
+                    // this could totally break, so honestly we need a better of sending messages safely
+                    let _ = sender.unbounded_send((channel_ref.clone(), message.clone()));
+                }
             }
             Ok(())
         });

@@ -37,13 +37,15 @@ pub enum WebRTCNotification {
     ChannelClose(ChannelRef),
 }
 
+pub type OutgoingDataChannelMessageSender = UnboundedSender<(ChannelRef, DataChannelMessage)>;
+
 // The general idea here is that we can recv messages on one task/thread, and send messages on another task.
 // so, we need to allow users to clone the sender so we can move it somewhere else.
 #[derive(Debug)]
 pub struct WebRTCCommunicationHandle {
     notification_receiver: UnboundedReceiver<WebRTCNotification>,
     incoming_datachannel_message_receiver: UnboundedReceiver<(ChannelRef, DataChannelMessage)>,
-    outgoing_datachannel_message_sender: UnboundedSender<(ChannelRef, DataChannelMessage)>,
+    outgoing_datachannel_message_sender: OutgoingDataChannelMessageSender,
 }
 
 impl WebRTCCommunicationHandle {
