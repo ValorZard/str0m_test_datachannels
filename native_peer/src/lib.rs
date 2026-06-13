@@ -7,9 +7,8 @@ use futures_util::{
     SinkExt, StreamExt,
     stream::{SplitSink, SplitStream},
 };
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::io::ErrorKind;
-use std::sync::Arc;
 use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr},
     time::Instant,
@@ -296,7 +295,7 @@ impl NativePeer {
                             println!("{peer_name}: channel close: {cid:?}");
                             self.channel_map.remove_channel(cid);
                         }
-                        other => {
+                        _other => {
                             //println!("{peer_name}: event: {other:?}");
                         }
                     },
