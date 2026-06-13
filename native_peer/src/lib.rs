@@ -154,8 +154,8 @@ pub struct NativePeer {
     pub bound_addr: SocketAddr,      // wildcard or actual socket bind
     pub advertised_addr: SocketAddr, // ICE candidate address exposed to peer
     pending_offer: Option<SdpPendingOffer>,
-    webrtc_notification_sender: UnboundedSender<WebRTCNotification>,
     channel_map: ChannelMap,
+    webrtc_notification_sender: UnboundedSender<WebRTCNotification>,
     // we want to let client api take the receiver so clients can read what's come in
     webrtc_notification_receiver: Option<UnboundedReceiver<WebRTCNotification>>,
     incoming_datachannel_message_sender: UnboundedSender<(ChannelRef, DataChannelMessage)>,

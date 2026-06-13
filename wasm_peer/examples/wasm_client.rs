@@ -1,5 +1,5 @@
 use anyhow::{Result, anyhow};
-use datachannel_socket_common::DataChannelMessage;
+use datachannel_socket_common::{DataChannelMessage, WebRTCNotification};
 use datachannel_socket_wasm_peer::{WasmPeerFactory, peer_log};
 use gloo_timers::future::TimeoutFuture;
 use wasm_bindgen::JsCast;
@@ -16,56 +16,31 @@ fn connect_to_server(server_address: String) {
                 .await
                 .expect("should work");
 
-            // wait until we have channels
-            let mut waited_ms = 0u32;
-            let mut channel_ids = wasm_peer.get_channel_ids();
-            peer_log!(
-                "Checking for channels after signaling, initial_count={}",
-                channel_ids.len()
-            );
+            let mut communication_handle = wasm_peer.get_communication_handle()?;
 
-            while channel_ids.is_empty() {
-                if waited_ms % 500 == 0 {
-                    peer_log!(
-                        "Waiting on channels to be available... waited={}ms",
-                        waited_ms
-                    );
-                }
-
-                TimeoutFuture::new(50).await;
-                waited_ms += 50;
-                channel_ids = wasm_peer.get_channel_ids();
-
-                if waited_ms >= 10_000 {
-                    return Err(anyhow!(
-                        "Timed out waiting for data channel to open after {}ms",
-                        waited_ms
-                    ));
+            // TODO: Find a better way to tell if the client has started running
+            let mut channels = Vec::new();
+            // TODO: just take one channel for now, figure out something better later
+            while let Ok(notification) = communication_handle.recv_notification().await {
+                if let WebRTCNotification::ChannelOpen(channel_ref) = notification {
+                    channels.push(channel_ref);
+                    break;
                 }
             }
 
-            peer_log!(
-                "Channels available after {}ms, channel_ids={:?}",
-                waited_ms,
-                channel_ids
-            );
-
-            let (mut incoming_datachannel_message_receiver, outgoing_datachannel_message_sender) =
-                wasm_peer.get_communication_channels()?;
-            for channel in channel_ids {
-                outgoing_datachannel_message_sender.unbounded_send((
-                    channel,
+            for channel_ref in channels {
+                let _ = communication_handle.send_datachannel_message(
+                    channel_ref.clone(),
                     DataChannelMessage::Text("Hello from wasm client!".into()),
-                ))?;
-
-                outgoing_datachannel_message_sender.unbounded_send((
-                    channel,
+                );
+                let _ = communication_handle.send_datachannel_message(
+                    channel_ref,
                     DataChannelMessage::Binary("Hello from wasm client in binary!".into()),
-                ))?;
+                );
             }
 
-            while let Ok(message) = incoming_datachannel_message_receiver.recv().await {
-                peer_log!("Received incoming datachannel message: {:?}", message);
+            while let Ok((channel_ref, message)) = communication_handle.recv_datachannel_message().await {
+                peer_log!("From {channel_ref:?} Received incoming datachannel message: {message:?}");
             }
 
             Ok(())

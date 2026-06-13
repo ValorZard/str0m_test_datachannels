@@ -27,7 +27,6 @@ async fn run_client(args: &Args) -> Result<()> {
         .await?;
 
     let (tx, rx) = oneshot::channel::<()>();
-    let msg = args.message.as_bytes().to_vec();
 
     let mut communication_handle = peer.get_communication_handle()?;
 

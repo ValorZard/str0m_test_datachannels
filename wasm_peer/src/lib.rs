@@ -1,5 +1,5 @@
 use anyhow::Result;
-use datachannel_socket_common::{DataChannelMessage, SignalMessage};
+use datachannel_socket_common::{ChannelRef, DataChannelMessage, SignalMessage, WebRTCCommunicationHandle, WebRTCNotification};
 use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender, unbounded};
 use futures_util::{SinkExt, StreamExt};
 use gloo_timers::future::TimeoutFuture;
@@ -35,21 +35,20 @@ pub struct IceCandidateMessage {
     pub sdp_mline_index: Option<u16>,
 }
 
-// See: https://developer.mozilla.org/en-US/docs/Web/API/RTCDataChannel/id
-type ChannelId = u16;
-
 struct Inner {
     pc: RtcPeerConnection,
-    data_channels: RefCell<HashMap<ChannelId, RtcDataChannel>>,
     pending_local_ice: RefCell<Vec<IceCandidateMessage>>,
-    incoming_datachannel_message_sender: UnboundedSender<(ChannelId, DataChannelMessage)>,
+    datachannel_map: RefCell<HashMap<ChannelRef, RtcDataChannel>>,
+    webrtc_notification_sender: UnboundedSender<WebRTCNotification>,
+    // we want to let client api take the receiver so clients can read what's come in
+    webrtc_notification_receiver: RefCell<Option<UnboundedReceiver<WebRTCNotification>>>,
+    incoming_datachannel_message_sender: UnboundedSender<(ChannelRef, DataChannelMessage)>,
     // we want to let client api take the receiver so clients can read what's come in
     incoming_datachannel_message_receiver:
-        RefCell<Option<UnboundedReceiver<(ChannelId, DataChannelMessage)>>>,
+        RefCell<Option<UnboundedReceiver<(ChannelRef, DataChannelMessage)>>>,
     // we can clone this and give it to the user before the native peer starts running for real
-    outgoing_datachannel_message_sender: UnboundedSender<(ChannelId, DataChannelMessage)>,
-    outgoing_datachannel_message_receiver:
-        RefCell<UnboundedReceiver<(ChannelId, DataChannelMessage)>>,
+    outgoing_datachannel_message_sender: UnboundedSender<(ChannelRef, DataChannelMessage)>,
+    outgoing_datachannel_message_receiver: RefCell<UnboundedReceiver<(ChannelRef, DataChannelMessage)>>,
 
     on_ice_candidate: OnceCell<Closure<dyn FnMut(RtcPeerConnectionIceEvent)>>,
     on_ice_connection_state_change: OnceCell<Closure<dyn FnMut(Event)>>,
@@ -70,6 +69,7 @@ impl WasmPeer {
         let config = make_rtc_config();
         let pc = RtcPeerConnection::new_with_configuration(&config)?;
 
+        let (webrtc_notification_sender, webrtc_notification_receiver) = unbounded();
         let (incoming_datachannel_message_sender, incoming_datachannel_message_receiver) =
             unbounded();
         let (outgoing_datachannel_message_sender, outgoing_datachannel_message_receiver) =
@@ -77,8 +77,10 @@ impl WasmPeer {
 
         let inner = Rc::new(Inner {
             pc,
-            data_channels: RefCell::new(HashMap::new()),
             pending_local_ice: RefCell::new(Vec::new()),
+            datachannel_map: RefCell::new(HashMap::new()),
+            webrtc_notification_sender,
+            webrtc_notification_receiver: RefCell::new(Some(webrtc_notification_receiver)),
             incoming_datachannel_message_sender,
             incoming_datachannel_message_receiver: RefCell::new(Some(
                 incoming_datachannel_message_receiver,
@@ -152,20 +154,6 @@ impl WasmPeer {
         Ok(())
     }
 
-    pub fn send_text(&self, channel_id: ChannelId, text: String) -> Result<(), JsValue> {
-        self.inner
-            .outgoing_datachannel_message_sender
-            .unbounded_send((channel_id, DataChannelMessage::Text(text)))
-            .map_err(|e| e.to_string().into())
-    }
-
-    pub fn send_bytes(&self, channel_id: ChannelId, bytes: Vec<u8>) -> Result<(), JsValue> {
-        self.inner
-            .outgoing_datachannel_message_sender
-            .unbounded_send((channel_id, DataChannelMessage::Binary(bytes)))
-            .map_err(|e| e.to_string().into())
-    }
-
     pub fn ice_connection_state(&self) -> RtcIceConnectionState {
         self.inner.pc.ice_connection_state()
     }
@@ -180,31 +168,43 @@ impl WasmPeer {
 }
 
 impl WasmPeer {
-    pub fn get_communication_channels(
+    pub fn get_communication_handle(
         &mut self,
-    ) -> Result<
-        (
-            UnboundedReceiver<(ChannelId, DataChannelMessage)>,
-            UnboundedSender<(ChannelId, DataChannelMessage)>,
-        ),
-        std::io::Error,
-    > {
+    ) -> Result<WebRTCCommunicationHandle, std::io::Error> {
+        let webrtc_notification_receiver =
+            self.inner.webrtc_notification_receiver
+                .take()
+                .ok_or(std::io::Error::new(
+                    ErrorKind::AlreadyExists,
+                    "WASM WebRTC Channel receiver already sent out",
+                ))?;
         let incoming_datachannel_message_receiver = self
             .inner
             .incoming_datachannel_message_receiver
             .take()
             .ok_or(std::io::Error::new(
-                ErrorKind::NotConnected,
-                "RTC not connected",
+                ErrorKind::AlreadyExists,
+                "WASM Incoming Channel receiver already sent out",
             ))?;
-        Ok((
+        Ok(WebRTCCommunicationHandle::new(
+            webrtc_notification_receiver,
             incoming_datachannel_message_receiver,
             self.inner.outgoing_datachannel_message_sender.clone(),
         ))
     }
 
-    pub fn get_channel_ids(&self) -> Vec<ChannelId> {
-        self.inner.data_channels.borrow().keys().cloned().collect()
+    pub fn send_text(&self, channel_ref: ChannelRef, text: String) -> Result<(), JsValue> {
+        self.inner
+            .outgoing_datachannel_message_sender
+            .unbounded_send((channel_ref, DataChannelMessage::Text(text)))
+            .map_err(|e| e.to_string().into())
+    }
+
+    pub fn send_bytes(&self, channel_ref: ChannelRef, bytes: Vec<u8>) -> Result<(), JsValue> {
+        self.inner
+            .outgoing_datachannel_message_sender
+            .unbounded_send((channel_ref, DataChannelMessage::Binary(bytes)))
+            .map_err(|e| e.to_string().into())
     }
 }
 
@@ -285,7 +285,7 @@ fn install_peer_handlers(inner: &Rc<Inner>) -> Result<(), JsValue> {
             .await
         {
             if let Some(dc) = inner_for_datachannel_sender
-                .data_channels
+                .datachannel_map
                 .borrow()
                 .get(&channel_id)
             {
@@ -297,6 +297,14 @@ fn install_peer_handlers(inner: &Rc<Inner>) -> Result<(), JsValue> {
                         let _ = dc.send_with_u8_array(&bytes);
                     }
                 }
+            } else {
+                web_sys::console::warn_1(
+                    &format!(
+                        "dropping outgoing message: no open channel found for {:?}",
+                        channel_id
+                    )
+                    .into(),
+                );
             }
         }
     });
@@ -308,12 +316,28 @@ fn install_data_channel_handlers(inner: &Rc<Inner>, dc: RtcDataChannel) -> Resul
     let inner_for_open = Rc::clone(inner);
     let dc_for_open = dc.clone();
     let on_open = Closure::wrap(Box::new(move |_e: Event| {
+        let channel_ref = ChannelRef {
+            label: dc_for_open.label(),
+            id_hint: dc_for_open.id(),
+        };
+        peer_log!("new channel: {:?}", channel_ref);
         // add data_channel to hashmap
-        let dc_id = dc_for_open.id().expect("There should be an ID here.");
         inner_for_open
-            .data_channels
+            .datachannel_map
             .borrow_mut()
-            .insert(dc_id, dc_for_open.clone());
+            .insert(channel_ref.clone(), dc_for_open.clone());
+        if let Err(err) = inner_for_open
+            .webrtc_notification_sender
+            .unbounded_send(WebRTCNotification::ChannelOpen(channel_ref.clone()))
+        {
+            web_sys::console::warn_1(
+                &format!(
+                    "failed to forward channel open notification for {:?}: {}",
+                    channel_ref, err
+                )
+                .into(),
+            );
+        }
         web_sys::console::log_1(&"data channel open".into());
     }) as Box<dyn FnMut(_)>);
     dc.set_onopen(Some(on_open.as_ref().unchecked_ref()));
@@ -322,20 +346,39 @@ fn install_data_channel_handlers(inner: &Rc<Inner>, dc: RtcDataChannel) -> Resul
     let inner_for_msg = Rc::clone(inner);
     let dc_for_msg = dc.clone();
     let on_message = Closure::wrap(Box::new(move |e: MessageEvent| {
-        let dc_id = dc_for_msg.id().expect("There should be an ID here.");
+        let channel_ref = ChannelRef {label: dc_for_msg.label(), id_hint: dc_for_msg.id()};
+
         if let Some(text) = e.data().as_string() {
-            let _ = inner_for_msg
+            if let Err(err) = inner_for_msg
                 .incoming_datachannel_message_sender
-                .unbounded_send((dc_id, DataChannelMessage::Text(text)));
+                .unbounded_send((channel_ref.clone(), DataChannelMessage::Text(text)))
+            {
+                web_sys::console::warn_1(
+                    &format!(
+                        "failed to forward text message for {:?}: {}",
+                        channel_ref, err
+                    )
+                    .into(),
+                );
+            }
             return;
         }
 
         if let Ok(buf) = e.data().dyn_into::<js_sys::ArrayBuffer>() {
             let arr = Uint8Array::new(&buf);
             let out = arr.to_vec();
-            let _ = inner_for_msg
+            if let Err(err) = inner_for_msg
                 .incoming_datachannel_message_sender
-                .unbounded_send((dc_id, DataChannelMessage::Binary(out)));
+                .unbounded_send((channel_ref.clone(), DataChannelMessage::Binary(out)))
+            {
+                web_sys::console::warn_1(
+                    &format!(
+                        "failed to forward binary message for {:?}: {}",
+                        channel_ref, err
+                    )
+                    .into(),
+                );
+            }
             return;
         }
         web_sys::console::warn_1(&"received unsupported message type".into());
