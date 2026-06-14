@@ -233,7 +233,10 @@ async fn benchmark_webrtc(args: &Args) -> Result<BenchResult> {
 
     let payload = args.message.clone().into_bytes();
     for i in 0..args.warmup_messages {
-        handle.send_datachannel_message(channel_ref.clone(), DataChannelMessage::Binary(payload.clone()))?;
+        handle.send_datachannel_message(
+            channel_ref.clone(),
+            DataChannelMessage::Binary(payload.clone()),
+        )?;
         let _ = timeout(
             Duration::from_secs(args.recv_timeout_secs),
             handle.recv_datachannel_message(),
@@ -248,7 +251,10 @@ async fn benchmark_webrtc(args: &Args) -> Result<BenchResult> {
     for i in 0..args.message_amount {
         let t0 = Instant::now();
 
-        handle.send_datachannel_message(channel_ref.clone(), DataChannelMessage::Binary(payload.clone()))?;
+        handle.send_datachannel_message(
+            channel_ref.clone(),
+            DataChannelMessage::Binary(payload.clone()),
+        )?;
 
         let (_, echo_msg) = timeout(
             Duration::from_secs(args.recv_timeout_secs),
@@ -338,9 +344,7 @@ async fn main() -> Result<()> {
 
     println!(
         "running benchmark: message_amount={}, payload={}, warmup_messages={}",
-        args.message_amount,
-        args.message,
-        args.warmup_messages
+        args.message_amount, args.message, args.warmup_messages
     );
 
     println!("\nphase 1/2: starting WebRTC server...");
@@ -387,7 +391,10 @@ async fn main() -> Result<()> {
     println!("\nrelative comparison (higher is better):");
     let ws_msgs_s = websocket.messages as f64 / websocket.total_duration.as_secs_f64();
     let webrtc_msgs_s = webrtc.messages as f64 / webrtc.total_duration.as_secs_f64();
-    println!("datachannel / websocket messages/sec ratio: {:.3}", webrtc_msgs_s / ws_msgs_s);
+    println!(
+        "datachannel / websocket messages/sec ratio: {:.3}",
+        webrtc_msgs_s / ws_msgs_s
+    );
 
     Ok(())
 }

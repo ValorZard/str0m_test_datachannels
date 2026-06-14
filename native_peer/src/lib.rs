@@ -275,16 +275,15 @@ impl NativePeer {
                                 .expect("channel should exist")
                                 .clone();
                             if data.binary {
-                                let _ = self
-                                    .incoming_datachannel_message_sender
-                                    .unbounded_send((channel_ref, DataChannelMessage::Binary(data.data)));
+                                let _ = self.incoming_datachannel_message_sender.unbounded_send((
+                                    channel_ref,
+                                    DataChannelMessage::Binary(data.data),
+                                ));
                             } else {
-                                let _ = self
-                                    .incoming_datachannel_message_sender
-                                    .unbounded_send((
-                                        channel_ref,
-                                        DataChannelMessage::Text(String::from_utf8(data.data)?),
-                                    ));
+                                let _ = self.incoming_datachannel_message_sender.unbounded_send((
+                                    channel_ref,
+                                    DataChannelMessage::Text(String::from_utf8(data.data)?),
+                                ));
                             }
                         }
                         Event::ChannelClose(cid) => {
