@@ -23,4 +23,10 @@ jobs:
     - name: Build WASM
       run: cargo build --target=wasm32-unknown-unknown --verbose
     - name: Run tests
-      run: cargo test --verbose
+      run: cargo test --verbose |
+        cargo run --release -p datachannel_socket_native_peer --example native_transport_benchmark -- --messages 10000 --warmup-messages 500 --payload-bytes 64 
+        cargo run --release -p datachannel_socket_native_peer --example native_transport_benchmark -- --messages 100000 --warmup-messages 500 --payload-bytes 64
+        cargo run --release -p datachannel_socket_native_peer --example native_transport_benchmark -- --messages 10000 --warmup-messages 500 --payload-bytes 512 
+        cargo run --release -p datachannel_socket_native_peer --example native_transport_benchmark -- --messages 100000 --warmup-messages 500 --payload-bytes 512 
+        cargo run --release -p datachannel_socket_native_peer --example native_transport_benchmark -- --messages 10000 --warmup-messages 500 --payload-bytes 1024 
+        cargo run --release -p datachannel_socket_native_peer --example native_transport_benchmark -- --messages 100000 --warmup-messages 500 --payload-bytes 1024 
