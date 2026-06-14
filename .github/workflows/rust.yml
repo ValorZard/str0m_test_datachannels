@@ -25,9 +25,9 @@ jobs:
     - name: Run tests and benchmarks
       run: |
         cargo test --verbose
-        cargo run --release -p datachannel_socket_native_peer --example native_transport_benchmark -- --messages 10000 --warmup-messages 500 --payload-bytes 64
-        cargo run --release -p datachannel_socket_native_peer --example native_transport_benchmark -- --messages 100000 --warmup-messages 500 --payload-bytes 64
-        cargo run --release -p datachannel_socket_native_peer --example native_transport_benchmark -- --messages 10000 --warmup-messages 500 --payload-bytes 512
-        cargo run --release -p datachannel_socket_native_peer --example native_transport_benchmark -- --messages 100000 --warmup-messages 500 --payload-bytes 512
-        cargo run --release -p datachannel_socket_native_peer --example native_transport_benchmark -- --messages 10000 --warmup-messages 500 --payload-bytes 1024
-        cargo run --release -p datachannel_socket_native_peer --example native_transport_benchmark -- --messages 100000 --warmup-messages 500 --payload-bytes 1024
+        cargo run --release -p datachannel_socket_native_peer --example native_transport_benchmark -- --message-amount 10000 --warmup-messages 500 
+        cargo run --release -p datachannel_socket_native_peer --example native_transport_benchmark -- --message-amount 100000 --warmup-messages 500
+        cargo run --release -p datachannel_socket_native_peer --example native_transport_benchmark -- --message-amount 10000 --warmup-messages 500 
+        cargo run --release -p datachannel_socket_native_peer --example native_transport_benchmark -- --message-amount 100000 --warmup-messages 500 
+        cargo run --release -p datachannel_socket_native_peer --example native_transport_benchmark -- --message-amount 10000 --warmup-messages 500 
+        cargo run --release -p datachannel_socket_native_peer --example native_transport_benchmark -- --message-amount 100000 --warmup-messages 500 
