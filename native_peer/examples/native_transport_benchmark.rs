@@ -36,10 +36,10 @@ struct Args {
     warmup_messages: usize,
 
     #[arg(long, default_value_t = 2_000)]
-    messages: usize,
+    message_amount: usize,
 
-    #[arg(long, default_value_t = 512)]
-    payload_bytes: usize,
+    #[arg(long, default_value = "Hello World")]
+    message: String,
 
     #[arg(long, default_value_t = 5)]
     recv_timeout_secs: u64,
@@ -100,15 +100,6 @@ fn percentile_us(sorted: &[u128], pct: f64) -> u128 {
     }
     let idx = ((sorted.len() as f64 - 1.0) * pct).round() as usize;
     sorted[idx.min(sorted.len() - 1)]
-}
-
-fn make_payload(seq: u64, payload_bytes: usize) -> Vec<u8> {
-    let mut payload = vec![0u8; payload_bytes.max(8)];
-    payload[..8].copy_from_slice(&seq.to_le_bytes());
-    for (i, byte) in payload[8..].iter_mut().enumerate() {
-        *byte = (i % 251) as u8;
-    }
-    payload
 }
 
 async fn run_webrtc_echo_server(
@@ -240,9 +231,9 @@ async fn benchmark_webrtc(args: &Args) -> Result<BenchResult> {
         }
     };
 
+    let payload = args.message.clone().into_bytes();
     for i in 0..args.warmup_messages {
-        let payload = make_payload(i as u64, args.payload_bytes);
-        handle.send_datachannel_message(channel_ref.clone(), DataChannelMessage::Binary(payload))?;
+        handle.send_datachannel_message(channel_ref.clone(), DataChannelMessage::Binary(payload.clone()))?;
         let _ = timeout(
             Duration::from_secs(args.recv_timeout_secs),
             handle.recv_datachannel_message(),
@@ -251,14 +242,13 @@ async fn benchmark_webrtc(args: &Args) -> Result<BenchResult> {
         .context("timeout during webrtc warmup")??;
     }
 
-    let mut rtt_us = Vec::with_capacity(args.messages);
+    let mut rtt_us = Vec::with_capacity(args.message_amount);
     let start = Instant::now();
 
-    for i in 0..args.messages {
-        let payload = make_payload((args.warmup_messages + i) as u64, args.payload_bytes);
+    for i in 0..args.message_amount {
         let t0 = Instant::now();
 
-        handle.send_datachannel_message(channel_ref.clone(), DataChannelMessage::Binary(payload))?;
+        handle.send_datachannel_message(channel_ref.clone(), DataChannelMessage::Binary(payload.clone()))?;
 
         let (_, echo_msg) = timeout(
             Duration::from_secs(args.recv_timeout_secs),
@@ -272,12 +262,8 @@ async fn benchmark_webrtc(args: &Args) -> Result<BenchResult> {
             DataChannelMessage::Text(text) => text.into_bytes(),
         };
 
-        if got.len() != args.payload_bytes.max(8) {
-            anyhow::bail!(
-                "webrtc echo payload size mismatch: expected {}, got {}",
-                args.payload_bytes.max(8),
-                got.len()
-            );
+        if got != payload {
+            anyhow::bail!("unexpected message received!");
         }
 
         rtt_us.push(t0.elapsed().as_micros());
@@ -287,8 +273,8 @@ async fn benchmark_webrtc(args: &Args) -> Result<BenchResult> {
 
     Ok(BenchResult {
         name: "datachannel-socket (str0m)",
-        messages: args.messages,
-        payload_bytes: args.payload_bytes.max(8),
+        messages: args.message_amount,
+        payload_bytes: payload.len(),
         total_duration: start.elapsed(),
         rtt_us,
     })
@@ -298,23 +284,23 @@ async fn benchmark_ws(args: &Args) -> Result<BenchResult> {
     let url = format!("ws://{}:{}", args.bind_ip, args.ws_port);
     let (mut ws, _) = connect_async(url).await?;
 
+    let payload = args.message.clone().into_bytes();
+
     for i in 0..args.warmup_messages {
-        let payload = make_payload(i as u64, args.payload_bytes);
-        ws.send(Message::Binary(payload.into())).await?;
+        ws.send(Message::Binary(payload.clone().into())).await?;
         let _ = timeout(Duration::from_secs(args.recv_timeout_secs), ws.next())
             .await
             .context("timeout during ws warmup")?
             .ok_or_else(|| anyhow::anyhow!("ws stream closed during warmup"))??;
     }
 
-    let mut rtt_us = Vec::with_capacity(args.messages);
+    let mut rtt_us = Vec::with_capacity(args.message_amount);
     let start = Instant::now();
 
-    for i in 0..args.messages {
-        let payload = make_payload((args.warmup_messages + i) as u64, args.payload_bytes);
+    for i in 0..args.message_amount {
         let t0 = Instant::now();
 
-        ws.send(Message::Binary(payload.into())).await?;
+        ws.send(Message::Binary(payload.clone().into())).await?;
 
         let msg = timeout(Duration::from_secs(args.recv_timeout_secs), ws.next())
             .await
@@ -327,12 +313,8 @@ async fn benchmark_ws(args: &Args) -> Result<BenchResult> {
             other => anyhow::bail!("unexpected ws message during benchmark: {other:?}"),
         };
 
-        if got.len() != args.payload_bytes.max(8) {
-            anyhow::bail!(
-                "ws echo payload size mismatch: expected {}, got {}",
-                args.payload_bytes.max(8),
-                got.len()
-            );
+        if got != payload {
+            anyhow::bail!("unexpected message received!");
         }
 
         rtt_us.push(t0.elapsed().as_micros());
@@ -342,8 +324,8 @@ async fn benchmark_ws(args: &Args) -> Result<BenchResult> {
 
     Ok(BenchResult {
         name: "tokio-tungstenite",
-        messages: args.messages,
-        payload_bytes: args.payload_bytes.max(8),
+        messages: args.message_amount,
+        payload_bytes: payload.len(),
         total_duration: start.elapsed(),
         rtt_us,
     })
@@ -355,9 +337,9 @@ async fn main() -> Result<()> {
     let args = Args::parse();
 
     println!(
-        "running benchmark: messages={}, payload_bytes={}, warmup_messages={}",
-        args.messages,
-        args.payload_bytes.max(8),
+        "running benchmark: message_amount={}, payload={}, warmup_messages={}",
+        args.message_amount,
+        args.message,
         args.warmup_messages
     );
 
