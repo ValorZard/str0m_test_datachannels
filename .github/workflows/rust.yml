@@ -22,5 +22,12 @@ jobs:
       run: rustup target add wasm32-unknown-unknown
     - name: Build WASM
       run: cargo build --target=wasm32-unknown-unknown --verbose
-    - name: Run tests
-      run: cargo test --verbose
+    - name: Run tests and benchmarks
+      run: |
+        cargo test --verbose
+        cargo run --release -p datachannel_socket_native_peer --example native_transport_benchmark -- --message-amount 10000 --warmup-messages 500 
+        cargo run --release -p datachannel_socket_native_peer --example native_transport_benchmark -- --message-amount 100000 --warmup-messages 500
+        cargo run --release -p datachannel_socket_native_peer --example native_transport_benchmark -- --message-amount 10000 --warmup-messages 500 
+        cargo run --release -p datachannel_socket_native_peer --example native_transport_benchmark -- --message-amount 100000 --warmup-messages 500 
+        cargo run --release -p datachannel_socket_native_peer --example native_transport_benchmark -- --message-amount 10000 --warmup-messages 500 
+        cargo run --release -p datachannel_socket_native_peer --example native_transport_benchmark -- --message-amount 100000 --warmup-messages 500 

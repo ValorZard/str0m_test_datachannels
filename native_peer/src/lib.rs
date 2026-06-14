@@ -7,9 +7,8 @@ use futures_util::{
     SinkExt, StreamExt,
     stream::{SplitSink, SplitStream},
 };
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::io::ErrorKind;
-use std::sync::Arc;
 use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr},
     time::Instant,
@@ -266,43 +265,38 @@ impl NativePeer {
                                 .expect("channel should be open");
                             let _ = self
                                 .webrtc_notification_sender
-                                .send(WebRTCNotification::ChannelOpen(channel_ref))
-                                .await;
+                                .unbounded_send(WebRTCNotification::ChannelOpen(channel_ref));
                         }
                         Event::ChannelData(data) => {
-                            let data_as_string = String::from_utf8_lossy(&data.data);
-                            println!("{peer_name}: got data: {data_as_string:?}");
+                            //println!("{peer_name}: got data: {data_as_string:?}");
                             let channel_ref = self
                                 .channel_map
                                 .get_ref_of_id(&data.id)
                                 .expect("channel should exist")
                                 .clone();
                             if data.binary {
-                                let _ = self
-                                    .incoming_datachannel_message_sender
-                                    .send((channel_ref, DataChannelMessage::Binary(data.data)))
-                                    .await;
+                                let _ = self.incoming_datachannel_message_sender.unbounded_send((
+                                    channel_ref,
+                                    DataChannelMessage::Binary(data.data),
+                                ));
                             } else {
-                                let _ = self
-                                    .incoming_datachannel_message_sender
-                                    .send((
-                                        channel_ref,
-                                        DataChannelMessage::Text(data_as_string.parse()?),
-                                    ))
-                                    .await;
+                                let _ = self.incoming_datachannel_message_sender.unbounded_send((
+                                    channel_ref,
+                                    DataChannelMessage::Text(String::from_utf8(data.data)?),
+                                ));
                             }
                         }
                         Event::ChannelClose(cid) => {
                             println!("{peer_name}: channel close: {cid:?}");
                             self.channel_map.remove_channel(cid);
                         }
-                        other => {
-                            println!("{peer_name}: event: {other:?}");
+                        _other => {
+                            //println!("{peer_name}: event: {other:?}");
                         }
                     },
                 }
                 // since this is a loop, lets allow for yielding
-                tokio::task::yield_now().await;
+                //tokio::task::yield_now().await;
             };
 
             let wait = next_timeout.saturating_duration_since(Instant::now());
