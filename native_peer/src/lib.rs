@@ -265,11 +265,9 @@ impl NativePeer {
                                 .expect("channel should be open");
                             let _ = self
                                 .webrtc_notification_sender
-                                .send(WebRTCNotification::ChannelOpen(channel_ref))
-                                .await;
+                                .unbounded_send(WebRTCNotification::ChannelOpen(channel_ref));
                         }
                         Event::ChannelData(data) => {
-                            let data_as_string = String::from_utf8_lossy(&data.data);
                             //println!("{peer_name}: got data: {data_as_string:?}");
                             let channel_ref = self
                                 .channel_map
@@ -279,16 +277,14 @@ impl NativePeer {
                             if data.binary {
                                 let _ = self
                                     .incoming_datachannel_message_sender
-                                    .send((channel_ref, DataChannelMessage::Binary(data.data)))
-                                    .await;
+                                    .unbounded_send((channel_ref, DataChannelMessage::Binary(data.data)));
                             } else {
                                 let _ = self
                                     .incoming_datachannel_message_sender
-                                    .send((
+                                    .unbounded_send((
                                         channel_ref,
-                                        DataChannelMessage::Text(data_as_string.parse()?),
-                                    ))
-                                    .await;
+                                        DataChannelMessage::Text(String::from_utf8(data.data)?),
+                                    ));
                             }
                         }
                         Event::ChannelClose(cid) => {
