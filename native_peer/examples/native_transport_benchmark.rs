@@ -351,6 +351,7 @@ async fn benchmark_ws(args: &Args) -> Result<BenchResult> {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    console_subscriber::init();
     let args = Args::parse();
 
     println!(

@@ -301,7 +301,7 @@ impl NativePeer {
                     },
                 }
                 // since this is a loop, lets allow for yielding
-                tokio::task::yield_now().await;
+                //tokio::task::yield_now().await;
             };
 
             let wait = next_timeout.saturating_duration_since(Instant::now());
